@@ -1,0 +1,134 @@
+# Vklass for Home Assistant (alpha)
+
+An unofficial custom integration for [Vklass](https://www.vklass.se), the Swedish school platform.
+It reads information from your parent account and creates sensors per child in Home Assistant.
+
+> **Status: alpha.** Vklass has no public API. This integration reads the same web pages the
+> Vklass website uses, so it can break whenever Vklass changes them. Use it for testing and
+> give feedback, not for anything that must never fail.
+
+## What it provides
+
+Every child on the account gets a device. Entity names use the child's name.
+
+| Entity | Type | Source |
+| --- | --- | --- |
+| Care today / Care tomorrow | sensor | Care schedule (times, closed, on leave) |
+| Attendance | sensor | Welcome page |
+| Next lesson | sensor | Calendar. Overlapping lessons are joined with ` \| ` |
+| Menu days | sensor | Welcome page (lunch menu) |
+| Merit value | sensor | Grades page (grade school, see below) |
+| Current grades | sensor | Grades page (grade school, see below) |
+| Active courses / Course attendance | sensor | Study overview (grade school, see below) |
+| Upcoming absences | sensor | Absence page (read only) |
+| Gym today / Gym tomorrow | binary sensor | Calendar (lecture with code "IDH"; calendar events never count) |
+| Holiday confirmation needed | binary sensor (problem) | Care schedule |
+| Schedule | calendar | Calendar (lessons, events, assignments, plans, vacant days) |
+| Absent now | binary sensor (presence) | Absence page (read only) |
+
+Account level:
+
+| Entity | Type |
+| --- | --- |
+| News (last 3 days) | sensor, with article titles and links as attributes |
+| Unread messages | sensor |
+| Notifications | sensor |
+
+## Installation
+
+### HACS (custom repository)
+
+1. In HACS, open the menu and choose **Custom repositories**.
+2. Add the repository URL and select category **Integration**.
+3. Install **Vklass** and restart Home Assistant.
+
+### Manual
+
+Copy `custom_components/vklass` into your Home Assistant `config/custom_components/` folder and restart.
+
+## Setup
+
+1. Go to **Settings → Devices & services → Add integration** and search for **Vklass**.
+2. Enter the username and password for your Vklass parent account. The login is checked before saving.
+
+School ids are found automatically. If a child has more than one possible school id, open the
+integration's **Configure** dialog and choose the right one. You can also type an id yourself, or
+leave the field empty to keep the automatic choice. Children without a school id get no grades or
+course data.
+
+In the same dialog you can choose which calendar categories appear in the **Schedule** calendar.
+
+Children are found on the Vklass welcome page. A child that is referenced there but has no card
+gets the placeholder name `Student <id>` until its card can be read.
+
+## Reporting an absence
+
+Each child has a button, **Report absence today**. Pressing it reports an absence from the current
+time until 23:59 the same day.
+
+- The button is **disabled by default**. Enable it in the entity settings before you use it.
+- It does nothing if an absence already covers the current time.
+- After reporting, the integration checks that Vklass shows the new absence. If it does not,
+  Home Assistant shows an error, so you can check Vklass yourself.
+- Check the result in Vklass the first time you use it. Reports go straight to the school.
+- A report made from a time after the school's cut-off is rejected by Vklass, and the button shows an error.
+
+## Known limitations
+
+- **School ids are discovered from Vklass responses.** If Vklass does not return one, the grades and
+  course sensors stay empty for that child until you enter the id yourself.
+- **Absence reporting uses the website form.** If Vklass changes the form, the button stops working and shows an error.
+- **Parsing depends on Vklass markup.** Scraping can break silently after a Vklass update. Check the
+  logs and the diagnostics after an update.
+- **Overlap detection is simple.** Two lessons count as overlapping when their times overlap with the
+  next lesson. Chains of overlaps are not followed.
+- **Scoreboard names are a guess.** The fields `messages` and `notifications` are based on the
+  response keys only. If the counts do not match what you see in Vklass, please report it.
+- **No Swedish or English translation review.** Texts were written by hand and need proofreading.
+- **Only pages that show children on the welcome page are found.** A child that is not referenced
+  on the welcome page at all is not discovered.
+
+## Privacy and security
+
+- Your username and password are stored in Home Assistant's configuration storage in plain text,
+  like other integrations that log in with a password. Use a strong password and keep your
+  Home Assistant instance secure.
+- Some Vklass pages contain links that give access to a calendar without logging in. Do not share
+  these links, and do not paste them into issues, screenshots or chats. If one was shared, revoke
+  it in Vklass.
+- The diagnostics download redacts credentials and contains no child names or ids. Check the file
+  before you attach it to an issue.
+
+## Reporting problems
+
+Open an issue with:
+
+1. The Home Assistant version and the integration version (see the manifest).
+2. What you expected and what happened.
+3. The relevant log lines (search for `vklass`), with names and ids removed.
+4. The diagnostics file, downloaded from the integration's page.
+
+## Development
+
+Parsers and summary functions can be tested without Home Assistant:
+
+```bash
+pip install requests
+python3 tests/test_parsers.py
+```
+
+The tests use invented data only. Please keep it that way in pull requests: no real names,
+student ids, school ids or calendar links in code, tests, fixtures or documentation.
+
+Layout:
+
+- `custom_components/vklass/api.py` - HTTP client and page parsers (no Home Assistant imports)
+- `custom_components/vklass/summaries.py` - pure summary functions (no Home Assistant imports)
+- `custom_components/vklass/coordinator.py` - polling and data assembly
+- `custom_components/vklass/sensor.py`, `binary_sensor.py`, `entity.py` - entities
+- `custom_components/vklass/config_flow.py` - config and options flow
+- `custom_components/vklass/diagnostics.py` - safe diagnostics
+
+## Disclaimer
+
+This project is not affiliated with, endorsed by or supported by Vklass. Use it at your own risk.
