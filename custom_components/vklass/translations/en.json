@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vklass",
+        "description": "Log in with your Vklass account.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Vklass login expired",
+        "description": "Enter the current password for {username}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Wrong username or password.",
+      "cannot_connect": "Could not connect to Vklass."
+    },
+    "abort": {
+      "already_configured": "This Vklass account is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Vklass settings",
+        "description": "School ids are found automatically. If a child has more than one possible school id, choose the right one. Leave a field empty to keep the automatic choice. Children without a school id have no grades or course data.",
+        "data": {
+          "calendar_categories": "Calendar categories"
+        }
+      }
+    }
+  },
+  "selector": {
+    "calendar_categories": {
+      "options": {
+        "lecture": "Lessons",
+        "event": "Calendar events",
+        "assignment": "Assignments",
+        "plan": "Plans",
+        "vacantday": "Vacant days",
+        "other": "Other"
+      }
+    }
+  }
+}

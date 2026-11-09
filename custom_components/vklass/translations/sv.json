@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vklass",
+        "description": "Logga in med ditt Vklass-konto.",
+        "data": {
+          "username": "Användarnamn",
+          "password": "Lösenord"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Vklass-inloggningen har gått ut",
+        "description": "Ange det aktuella lösenordet för {username}.",
+        "data": {
+          "password": "Lösenord"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Fel användarnamn eller lösenord.",
+      "cannot_connect": "Kunde inte ansluta till Vklass."
+    },
+    "abort": {
+      "already_configured": "Det här Vklass-kontot är redan konfigurerat.",
+      "reauth_successful": "Inloggningen är förnyad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Vklass-inställningar",
+        "description": "Skol-id hittas automatiskt. Om ett barn har fler än ett möjligt skol-id väljer du rätt här. Lämna fältet tomt för att behålla det automatiska valet. Barn utan skol-id får inga betyg- eller ämnesdata.",
+        "data": {
+          "calendar_categories": "Kalenderkategorier"
+        }
+      }
+    }
+  },
+  "selector": {
+    "calendar_categories": {
+      "options": {
+        "lecture": "Lektioner",
+        "event": "Kalenderhändelser",
+        "assignment": "Uppgifter",
+        "plan": "Planeringar",
+        "vacantday": "Lediga dagar",
+        "other": "Övrigt"
+      }
+    }
+  }
+}
