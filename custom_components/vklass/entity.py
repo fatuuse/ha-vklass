@@ -35,7 +35,6 @@ class VklassChildEntity(CoordinatorEntity[VklassCoordinator]):
             identifiers={(DOMAIN, f"{entry.entry_id}_{child_key}")},
             name=child["name"],
             manufacturer="Vklass",
-            model="Pupil",
         )
 
     @property

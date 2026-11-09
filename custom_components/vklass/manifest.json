@@ -2,11 +2,11 @@
   "domain": "vklass",
   "name": "Vklass",
   "codeowners": [
-    "@your-github-user"
+    "@fatuuse"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/your-github-user/vklass-ha",
-  "issue_tracker": "https://github.com/your-github-user/vklass-ha/issues",
+  "documentation": "https://github.com/fatuuse/ha-vklass",
+  "issue_tracker": "https://github.com/fatuuse/ha-vklass/issues",
   "iot_class": "cloud_polling",
   "requirements": [],
   "version": "0.1.0-alpha.3"
