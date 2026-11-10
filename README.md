@@ -16,7 +16,7 @@ Every child on the account gets a device. Entity names use the child's name.
 | Care today / Care tomorrow | sensor | Care schedule (times, closed, on leave) |
 | Attendance | sensor | Welcome page |
 | Next lesson | sensor | Calendar. Overlapping lessons are joined with ` \| ` |
-| Menu days | sensor | Welcome page (lunch menu) |
+| Lunch | sensor | Welcome page. State is today's lunch until 15:00, then tomorrow's. Attribute `days` has every day |
 | Merit value | sensor | Grades page (grade school, see below) |
 | Current grades | sensor | Grades page (grade school, see below) |
 | Active courses / Course attendance | sensor | Study overview (grade school, see below) |
@@ -48,6 +48,18 @@ Copy `custom_components/vklass` into your Home Assistant `config/custom_componen
 
 ## Setup
 
+The settings below are shown during setup, and can be changed later under **Configure**.
+
+### Choose how to log in
+
+- **Session cookie (recommended).** Works with BankID and other login methods. Log in to Vklass in your
+  browser, copy the value of the cookie named `se.vklass.authentication`, and paste it into the setup.
+  The cookie can expire. Then Home Assistant asks you for a new one.
+- **Username and password.** Stored in Home Assistant's configuration. Use this only if you cannot
+  use a cookie.
+
+Either way, the secret is stored in plain text in Home Assistant's configuration storage.
+
 1. Go to **Settings → Devices & services → Add integration** and search for **Vklass**.
 2. Enter the username and password for your Vklass parent account. The login is checked before saving.
 
@@ -56,10 +68,22 @@ integration's **Configure** dialog and choose the right one. You can also type a
 leave the field empty to keep the automatic choice. Children without a school id get no grades or
 course data.
 
-In the same dialog you can choose which calendar categories appear in the **Schedule** calendar.
+In the same dialog you can choose which calendar categories appear in the **Schedule** calendar. You can also hide all-day events that span several days, such as whole terms or plans.
 
 Children are found on the Vklass welcome page. A child that is referenced there but has no card
 gets the placeholder name `Student <id>` until its card can be read.
+
+## Keeping the session alive
+
+The integration requests the Vklass scoreboard every 10 minutes. This keeps the session active, so a
+session cookie is not lost from inactivity. If Vklass rotates the cookie, the new value is saved
+automatically. If the session expires anyway, Home Assistant asks you to log in again.
+
+## Entities disabled by default
+
+When an entity is first created, it is disabled if it cannot have data for that child. Examples are
+attendance and care times for a child without care. Enable them in Home Assistant if you need them. The rules only apply to new
+entities, so existing entities keep their state.
 
 ## Reporting an absence
 
