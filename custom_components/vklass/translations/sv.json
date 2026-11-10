@@ -3,22 +3,47 @@
     "step": {
       "user": {
         "title": "Vklass",
-        "description": "Logga in med ditt Vklass-konto.",
+        "description": "Välj hur du vill logga in på Vklass.",
+        "data": {
+          "auth_method": "Inloggningssätt"
+        }
+      },
+      "password": {
+        "title": "Vklass",
+        "description": "Logga in med ditt Vklass-användarnamn och lösenord.",
         "data": {
           "username": "Användarnamn",
           "password": "Lösenord"
         }
       },
+      "cookie": {
+        "title": "Vklass-sessionscookie",
+        "description": "Logga in på Vklass i webbläsaren, kopiera värdet för cookien se.vklass.authentication och klistra in det här. Cookien kan gå ut, då behöver du klistra in en ny.",
+        "data": {
+          "cookie": "Cookie-värde"
+        }
+      },
       "reauth_confirm": {
         "title": "Vklass-inloggningen har gått ut",
-        "description": "Ange det aktuella lösenordet för {username}.",
+        "description": "Ange det aktuella lösenordet eller sessionscookien för {username}.",
         "data": {
-          "password": "Lösenord"
+          "password": "Lösenord",
+          "cookie": "Cookie-värde"
+        }
+      },
+      "settings": {
+        "title": "Inställningar",
+        "description": "Välj vilka kalenderkategorier som ska visas och om heldagshändelser som pågår flera dygn ska döljas. Skol-id hittas automatiskt. Du kan ändra detta senare under Konfigurera.",
+        "data": {
+          "calendar_categories": "Kalenderkategorier",
+          "hide_multiday_all_day": "Dölj heldagshändelser som pågår flera dygn"
         }
       }
     },
     "error": {
       "invalid_auth": "Fel användarnamn eller lösenord.",
+      "invalid_cookie": "Sessionscookien är inte giltig eller har gått ut.",
+      "no_children": "Inga elever hittades på kontot.",
       "cannot_connect": "Kunde inte ansluta till Vklass."
     },
     "abort": {
@@ -30,14 +55,21 @@
     "step": {
       "init": {
         "title": "Vklass-inställningar",
-        "description": "Skol-id hittas automatiskt. Om ett barn har fler än ett möjligt skol-id väljer du rätt här. Lämna fältet tomt för att behålla det automatiska valet. Barn utan skol-id får inga betyg- eller ämnesdata.",
+        "description": "Skol-id hittas automatiskt. Om en elev har fler än ett möjligt skol-id väljer du rätt här. Lämna fältet tomt för att behålla det automatiska valet. Elever utan skol-id får inga betyg- eller ämnesdata.",
         "data": {
-          "calendar_categories": "Kalenderkategorier"
+          "calendar_categories": "Kalenderkategorier",
+          "hide_multiday_all_day": "Dölj heldagshändelser som pågår flera dygn"
         }
       }
     }
   },
   "selector": {
+    "auth_method": {
+      "options": {
+        "password": "Användarnamn och lösenord",
+        "cookie": "Sessionscookie"
+      }
+    },
     "calendar_categories": {
       "options": {
         "lecture": "Lektioner",
@@ -46,6 +78,76 @@
         "plan": "Planeringar",
         "vacantday": "Lediga dagar",
         "other": "Övrigt"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "care_today": {
+        "name": "Omsorgstid idag"
+      },
+      "care_tomorrow": {
+        "name": "Omsorgstid imorgon"
+      },
+      "attendance": {
+        "name": "Närvaro"
+      },
+      "next_lesson": {
+        "name": "Nästa lektion"
+      },
+      "merit_value": {
+        "name": "Meritvärde"
+      },
+      "current_grades": {
+        "name": "Aktuella betyg"
+      },
+      "courses_active": {
+        "name": "Pågående ämnen"
+      },
+      "course_attendance": {
+        "name": "Närvaro i ämnen"
+      },
+      "absences_upcoming": {
+        "name": "Kommande frånvaro"
+      },
+      "messages": {
+        "name": "Olästa meddelanden"
+      },
+      "notifications": {
+        "name": "Notifieringar"
+      },
+      "news": {
+        "name": "Nyheter (senaste 3 dagarna)"
+      },
+      "care_time": {
+        "name": "Omsorgstid"
+      },
+      "menu": {
+        "name": "Lunch"
+      }
+    },
+    "binary_sensor": {
+      "gym_today": {
+        "name": "Gympa idag"
+      },
+      "gym_tomorrow": {
+        "name": "Gympa imorgon"
+      },
+      "holiday_confirmation": {
+        "name": "Lov behöver bekräftas"
+      },
+      "absent_now": {
+        "name": "Frånvarande just nu"
+      }
+    },
+    "calendar": {
+      "schedule": {
+        "name": "Schema"
+      }
+    },
+    "button": {
+      "report_absence": {
+        "name": "Anmäl frånvaro idag"
       }
     }
   }

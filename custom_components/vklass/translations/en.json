@@ -3,22 +3,47 @@
     "step": {
       "user": {
         "title": "Vklass",
-        "description": "Log in with your Vklass account.",
+        "description": "Choose how to log in to Vklass.",
+        "data": {
+          "auth_method": "Login method"
+        }
+      },
+      "password": {
+        "title": "Vklass",
+        "description": "Log in with your Vklass username and password.",
         "data": {
           "username": "Username",
           "password": "Password"
         }
       },
+      "cookie": {
+        "title": "Vklass session cookie",
+        "description": "Log in to Vklass in your browser, copy the value of the cookie named se.vklass.authentication and paste it here. The cookie can expire, and then you need to paste a new one.",
+        "data": {
+          "cookie": "Cookie value"
+        }
+      },
       "reauth_confirm": {
         "title": "Vklass login expired",
-        "description": "Enter the current password for {username}.",
+        "description": "Enter the current password or session cookie for {username}.",
         "data": {
-          "password": "Password"
+          "password": "Password",
+          "cookie": "Cookie value"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Choose which calendar categories to show and how to hide all-day events. School ids are found automatically. You can change these later under Configure.",
+        "data": {
+          "calendar_categories": "Calendar categories",
+          "hide_multiday_all_day": "Hide all-day events that span several days"
         }
       }
     },
     "error": {
       "invalid_auth": "Wrong username or password.",
+      "invalid_cookie": "The session cookie is not valid or has expired.",
+      "no_children": "No children were found on this account.",
       "cannot_connect": "Could not connect to Vklass."
     },
     "abort": {
@@ -32,12 +57,19 @@
         "title": "Vklass settings",
         "description": "School ids are found automatically. If a child has more than one possible school id, choose the right one. Leave a field empty to keep the automatic choice. Children without a school id have no grades or course data.",
         "data": {
-          "calendar_categories": "Calendar categories"
+          "calendar_categories": "Calendar categories",
+          "hide_multiday_all_day": "Hide all-day events that span several days"
         }
       }
     }
   },
   "selector": {
+    "auth_method": {
+      "options": {
+        "password": "Username and password",
+        "cookie": "Session cookie"
+      }
+    },
     "calendar_categories": {
       "options": {
         "lecture": "Lessons",
@@ -46,6 +78,76 @@
         "plan": "Plans",
         "vacantday": "Vacant days",
         "other": "Other"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "care_today": {
+        "name": "Care today"
+      },
+      "care_tomorrow": {
+        "name": "Care tomorrow"
+      },
+      "attendance": {
+        "name": "Attendance"
+      },
+      "next_lesson": {
+        "name": "Next lesson"
+      },
+      "merit_value": {
+        "name": "Merit value"
+      },
+      "current_grades": {
+        "name": "Current grades"
+      },
+      "courses_active": {
+        "name": "Active courses"
+      },
+      "course_attendance": {
+        "name": "Course attendance"
+      },
+      "absences_upcoming": {
+        "name": "Upcoming absences"
+      },
+      "messages": {
+        "name": "Unread messages"
+      },
+      "notifications": {
+        "name": "Notifications"
+      },
+      "news": {
+        "name": "News (last 3 days)"
+      },
+      "care_time": {
+        "name": "Care time"
+      },
+      "menu": {
+        "name": "Lunch"
+      }
+    },
+    "binary_sensor": {
+      "gym_today": {
+        "name": "Gym today"
+      },
+      "gym_tomorrow": {
+        "name": "Gym tomorrow"
+      },
+      "holiday_confirmation": {
+        "name": "Holiday confirmation needed"
+      },
+      "absent_now": {
+        "name": "Absent now"
+      }
+    },
+    "calendar": {
+      "schedule": {
+        "name": "Schedule"
+      }
+    },
+    "button": {
+      "report_absence": {
+        "name": "Report absence today"
       }
     }
   }
