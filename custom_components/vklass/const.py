@@ -40,3 +40,22 @@ GYM_CATEGORY = "lecture"
 SESSION_SEPARATOR = " | "
 
 OPTION_CALENDAR_CATEGORIES = "calendar_categories"
+
+# Config entry data keys. Same strings as Home Assistant's CONF_USERNAME and CONF_PASSWORD.
+DATA_USERNAME = "username"
+DATA_PASSWORD = "password"
+DATA_COOKIE = "cookie"
+CONF_AUTH_METHOD = "auth_method"
+
+AUTH_PASSWORD = "password"
+AUTH_COOKIE = "cookie"
+
+# The Vklass session cookie. It is set on the parent domain so every Vklass host receives it.
+COOKIE_NAME = "se.vklass.authentication"
+COOKIE_DOMAIN = ".vklass.se"
+
+# Keepalive: a request to the scoreboard every 10 minutes keeps the Vklass session alive.
+KEEPALIVE_INTERVAL = timedelta(minutes=10)
+
+# Hide all-day events that span several days (for example a term or a plan) from the calendar.
+OPTION_HIDE_MULTIDAY_ALLDAY = "hide_multiday_all_day"

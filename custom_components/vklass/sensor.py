@@ -31,26 +31,26 @@ class VklassChildSensorDescription(SensorEntityDescription):
 CHILD_SENSORS: tuple[VklassChildSensorDescription, ...] = (
     VklassChildSensorDescription(
         key="care_time",
-        name="Care time",
+        translation_key="care_time",
         icon="mdi:clock-outline",
         value_fn=lambda c: c.get("caretime"),
     ),
     VklassChildSensorDescription(
         key="attendance",
-        name="Attendance",
+        translation_key="attendance",
         icon="mdi:account-check",
         value_fn=lambda c: c.get("check"),
     ),
     VklassChildSensorDescription(
         key="next_lesson",
-        name="Next lesson",
+        translation_key="next_lesson",
         icon="mdi:calendar-clock",
         value_fn=lambda c: (c.get("next_event") or {}).get("title"),
         attrs_fn=lambda c: dict(c.get("next_event") or {}),
     ),
     VklassChildSensorDescription(
         key="care_today",
-        name="Care today",
+        translation_key="care_today",
         icon="mdi:calendar-account",
         value_fn=lambda c: (c.get("care_today") or {}).get("state"),
         attrs_fn=lambda c: {
@@ -60,25 +60,25 @@ CHILD_SENSORS: tuple[VklassChildSensorDescription, ...] = (
     ),
     VklassChildSensorDescription(
         key="care_tomorrow",
-        name="Care tomorrow",
+        translation_key="care_tomorrow",
         icon="mdi:calendar-arrow-right",
         value_fn=lambda c: (c.get("care_tomorrow") or {}).get("state"),
         attrs_fn=lambda c: {k: v for k, v in (c.get("care_tomorrow") or {}).items() if k != "state"},
     ),
     VklassChildSensorDescription(
         key="absences_upcoming",
-        name="Upcoming absences",
+        translation_key="absences_upcoming",
         icon="mdi:calendar-remove",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda c: c.get("absences_upcoming"),
         attrs_fn=lambda c: {"absences": c.get("absences") or []},
     ),
     VklassChildSensorDescription(
-        key="menu_days",
-        name="Menu days",
+        key="menu",
+        translation_key="menu",
         icon="mdi:silverware-fork-knife",
-        value_fn=lambda c: len(c.get("food") or {}),
-        attrs_fn=lambda c: {"menu": c.get("food") or {}},
+        value_fn=lambda c: c.get("menu_state"),
+        attrs_fn=lambda c: {"date": c.get("menu_date"), "days": c.get("menu_days") or []},
     ),
 )
 
@@ -86,14 +86,14 @@ CHILD_SENSORS: tuple[VklassChildSensorDescription, ...] = (
 GRADE_SENSORS: tuple[VklassChildSensorDescription, ...] = (
     VklassChildSensorDescription(
         key="merit_value",
-        name="Merit value",
+        translation_key="merit_value",
         icon="mdi:school",
         value_fn=lambda c: c.get("merit_value"),
         attrs_fn=lambda c: {"term": c.get("merit_term"), "history": c.get("merit_history") or {}},
     ),
     VklassChildSensorDescription(
         key="current_grades",
-        name="Current grades",
+        translation_key="current_grades",
         icon="mdi:format-list-numbered",
         value_fn=lambda c: None if c.get("grade_term") is None else len(c.get("grades_current") or {}),
         attrs_fn=lambda c: {
@@ -108,14 +108,14 @@ GRADE_SENSORS: tuple[VklassChildSensorDescription, ...] = (
 COURSE_SENSORS: tuple[VklassChildSensorDescription, ...] = (
     VklassChildSensorDescription(
         key="courses_active",
-        name="Active courses",
+        translation_key="courses_active",
         icon="mdi:book-open-variant",
         value_fn=lambda c: c.get("courses_active"),
         attrs_fn=lambda c: {"courses": c.get("courses") or []},
     ),
     VklassChildSensorDescription(
         key="course_attendance",
-        name="Course attendance",
+        translation_key="course_attendance",
         icon="mdi:account-clock",
         native_unit_of_measurement="%",
         state_class=SensorStateClass.MEASUREMENT,
@@ -149,7 +149,7 @@ class VklassChildSensor(VklassChildEntity, SensorEntity):
 
 class VklassNewsSensor(CoordinatorEntity[VklassCoordinator], SensorEntity):
     _attr_has_entity_name = True
-    _attr_name = f"News (last {NEWS_DAYS} days)"
+    _attr_translation_key = "news"
     _attr_icon = "mdi:newspaper-variant-outline"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -180,14 +180,14 @@ class VklassServiceSensorDescription(SensorEntityDescription):
 SERVICE_SENSORS: tuple[VklassServiceSensorDescription, ...] = (
     VklassServiceSensorDescription(
         key="messages",
-        name="Unread messages",
+        translation_key="messages",
         icon="mdi:message-badge-outline",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: (d.get("scoreboard") or {}).get("messages"),
     ),
     VklassServiceSensorDescription(
         key="notifications",
-        name="Notifications",
+        translation_key="notifications",
         icon="mdi:bell-outline",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda d: (d.get("scoreboard") or {}).get("notifications"),

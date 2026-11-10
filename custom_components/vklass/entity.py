@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import VklassCoordinator
+from .summaries import entity_enabled_by_default
 
 
 class VklassChildEntity(CoordinatorEntity[VklassCoordinator]):
@@ -31,6 +32,7 @@ class VklassChildEntity(CoordinatorEntity[VklassCoordinator]):
         child = coordinator.data["children"][child_key]
 
         self._attr_unique_id = f"{entry.entry_id}_{child_key}_{key}"
+        self._attr_entity_registry_enabled_default = entity_enabled_by_default(child, key)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{entry.entry_id}_{child_key}")},
             name=child["name"],

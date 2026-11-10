@@ -20,7 +20,7 @@ from .entity import VklassChildEntity
 
 class VklassReportAbsenceButton(VklassChildEntity, ButtonEntity):
     _attr_icon = "mdi:account-off-outline"
-    _attr_name = "Report absence today"
+    _attr_translation_key = "report_absence"
     _attr_entity_registry_enabled_default = False
 
     def __init__(self, coordinator: VklassCoordinator, entry: VklassConfigEntry, child_key: str) -> None:

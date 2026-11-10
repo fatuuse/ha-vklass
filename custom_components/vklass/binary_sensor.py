@@ -27,26 +27,26 @@ class VklassChildBinarySensorDescription(BinarySensorEntityDescription):
 CHILD_BINARY_SENSORS: tuple[VklassChildBinarySensorDescription, ...] = (
     VklassChildBinarySensorDescription(
         key="gym_today",
-        name="Gym today",
+        translation_key="gym_today",
         icon="mdi:run",
         value_fn=lambda c: bool(c.get("gym_today")),
     ),
     VklassChildBinarySensorDescription(
         key="gym_tomorrow",
-        name="Gym tomorrow",
+        translation_key="gym_tomorrow",
         icon="mdi:run",
         value_fn=lambda c: bool(c.get("gym_tomorrow")),
     ),
     VklassChildBinarySensorDescription(
         key="holiday_confirmation",
-        name="Holiday confirmation needed",
+        translation_key="holiday_confirmation",
         icon="mdi:calendar-alert",
         device_class=BinarySensorDeviceClass.PROBLEM,
         value_fn=lambda c: bool(c.get("pending_holidays")),
         attrs_fn=lambda c: {"holidays": c.get("pending_holidays") or []},
     ),    VklassChildBinarySensorDescription(
         key="absent_now",
-        name="Absent now",
+        translation_key="absent_now",
         icon="mdi:account-off",
         device_class=BinarySensorDeviceClass.PRESENCE,
         value_fn=lambda c: c.get("absent_now"),

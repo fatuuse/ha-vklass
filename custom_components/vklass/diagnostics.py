@@ -8,12 +8,12 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from .const import DATA_COOKIE, DATA_PASSWORD, DATA_USERNAME
 from homeassistant.core import HomeAssistant
 
 from . import VklassConfigEntry
 
-TO_REDACT = {CONF_USERNAME, CONF_PASSWORD}
+TO_REDACT = {DATA_USERNAME, DATA_PASSWORD, DATA_COOKIE}
 
 
 async def async_get_config_entry_diagnostics(

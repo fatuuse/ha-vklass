@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import threading
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -14,6 +15,13 @@ import requests
 from .const import (
     BASE_URL,
     ABSENCE_URL,
+    AUTH_COOKIE,
+    CONF_AUTH_METHOD,
+    COOKIE_DOMAIN,
+    COOKIE_NAME,
+    DATA_COOKIE,
+    DATA_PASSWORD,
+    DATA_USERNAME,
     CALENDAR_DAYS,
     CATEGORY_BY_CLASS,
     CATEGORY_BY_EVENT_TYPE,
@@ -65,17 +73,43 @@ def _parse_food(block: str) -> dict[str, list[str]]:
 
 
 class VklassClient:
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(
+        self,
+        username: str | None = None,
+        password: str | None = None,
+        cookie: str | None = None,
+        on_cookie_update: Callable[[str], None] | None = None,
+    ) -> None:
+        """Use username and password, or a Vklass session cookie. Never both.
+
+        on_cookie_update is called with the new value when Vklass rotates the cookie.
+        """
         self._username = username
         self._password = password
+        self._cookie = cookie
+        self._on_cookie_update = on_cookie_update
         self._session = requests.Session()
         self._lock = threading.RLock()
+        self._authenticated = False
+        if cookie is not None:
+            self._session.cookies.set(COOKIE_NAME, cookie, domain=COOKIE_DOMAIN, path="/")
+            self._authenticated = True
 
     def login(self) -> None:
         with self._lock:
             self._login()
 
+    def ensure_login(self) -> None:
+        """Log in only if no session is known to be active. Expired sessions are renewed on demand."""
+        with self._lock:
+            if not self._authenticated:
+                self._login()
+
     def _login(self) -> None:
+        if self._cookie is not None:
+            # Cookie sessions cannot be renewed here. An expired cookie is reported as an auth error.
+            self._authenticated = True
+            return
         try:
             page = self._session.get(LOGIN_PAGE, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as err:
@@ -104,6 +138,7 @@ class VklassClient:
 
         if response.status_code == 302:
             _LOGGER.debug("Logged in to Vklass")
+            self._authenticated = True
             return
         if response.status_code == 200:
             raise VklassAuthError("Wrong username or password")
@@ -127,7 +162,10 @@ class VklassClient:
                 _LOGGER.debug("Vklass session expired, logging in again")
                 self.login()
                 return self._request(method, url, retry=False, **kwargs)
+            if response.status_code in (302, 401, 403) and self._cookie is not None:
+                raise VklassAuthError("The Vklass session cookie has expired")
             raise VklassConnectionError(f"{url} returned HTTP {response.status_code}")
+        self._sync_cookie()
         return response
 
     def get_children(self) -> dict[str, dict[str, Any]]:
@@ -345,6 +383,20 @@ class VklassClient:
             raise VklassConnectionError("Vklass did not confirm the absence report")
         return "reported"
 
+    def _sync_cookie(self) -> None:
+        """Pick up a rotated session cookie from the response and tell the owner about it."""
+        if self._cookie is None:
+            return
+        values = [c.value for c in self._session.cookies if c.name == COOKIE_NAME]
+        if values and values[-1] != self._cookie:
+            self._cookie = values[-1]
+            if self._on_cookie_update is not None:
+                self._on_cookie_update(self._cookie)
+
+    def ping(self) -> None:
+        """Keep the session alive. Uses the scoreboard, which the Vklass start page polls too."""
+        self.get_scoreboard()
+
     def get_absences(self) -> dict[int, list[dict[str, Any]]]:
         """Return current and upcoming absence reports per student id (read-only)."""
         page = self._request("GET", ABSENCE_URL).text
@@ -355,12 +407,13 @@ class VklassClient:
         response = self._request(
             "GET",
             SCOREBOARD_URL,
-            params={"X-Requested-With": "XMLHttpRequest"},
+            params={"X-Requested-With": "XMLHttpRequest", "_": int(datetime.now().timestamp() * 1000)},
         )
         try:
             data = response.json()
         except ValueError as err:
-            raise VklassConnectionError("Scoreboard response was not JSON") from err
+            # A login page instead of JSON means the session has expired
+            raise VklassAuthError("Scoreboard did not return JSON; the session has probably expired") from err
         if not isinstance(data, dict):
             raise VklassConnectionError("Unexpected scoreboard format")
         return data
@@ -556,3 +609,13 @@ def _covers(absences: dict[int, list[dict[str, Any]]], student_id: int, now: dat
         datetime.fromisoformat(a["start"]) <= now <= datetime.fromisoformat(a["end"])
         for a in absences.get(student_id, [])
     )
+
+
+def client_for_data(
+    data: Mapping[str, Any],
+    on_cookie_update: Callable[[str], None] | None = None,
+) -> VklassClient:
+    """Build a client from config entry data, using either a cookie or username and password."""
+    if data.get(CONF_AUTH_METHOD) == AUTH_COOKIE:
+        return VklassClient(cookie=data[DATA_COOKIE], on_cookie_update=on_cookie_update)
+    return VklassClient(data[DATA_USERNAME], data[DATA_PASSWORD])

@@ -6,13 +6,12 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import VklassAuthError, VklassClient, VklassConnectionError
-from .const import DOMAIN, GYM_KEYWORD, LESSON_EVENT_TYPE, OPTION_SCHOOL_IDS, UPDATE_INTERVAL
+from .api import VklassAuthError, VklassConnectionError, client_for_data
+from .const import DATA_COOKIE, DOMAIN, GYM_KEYWORD, LESSON_EVENT_TYPE, OPTION_SCHOOL_IDS, UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,6 +22,7 @@ from .summaries import (
     summarize_care,
     summarize_courses,
     summarize_grades,
+    summarize_menu,
 )
 
 
@@ -37,7 +37,31 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=DOMAIN,
             update_interval=UPDATE_INTERVAL,
         )
-        self.client = VklassClient(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
+        self.client = client_for_data(entry.data, on_cookie_update=self._on_cookie_update)
+        # Options as they were when this coordinator was built. Used to tell option changes from data changes.
+        self.applied_options = dict(entry.options)
+
+    def _on_cookie_update(self, cookie: str) -> None:
+        """Called from the executor thread when Vklass rotates the session cookie."""
+        self.hass.add_job(self._save_cookie, cookie)
+
+    @callback
+    def _save_cookie(self, cookie: str) -> None:
+        if self.config_entry.data.get(DATA_COOKIE) == cookie:
+            return
+        self.hass.config_entries.async_update_entry(
+            self.config_entry, data={**self.config_entry.data, DATA_COOKIE: cookie}
+        )
+
+    async def async_keepalive(self, _now: Any = None) -> None:
+        """Ping Vklass so the session does not expire from inactivity."""
+        try:
+            await self.hass.async_add_executor_job(self.client.ping)
+        except VklassAuthError:
+            _LOGGER.warning("The Vklass session has expired, re-authentication is needed")
+            self.config_entry.async_start_reauth(self.hass)
+        except VklassConnectionError as err:
+            _LOGGER.debug("Vklass keepalive failed: %s", err)
         self._discovered: dict[int, list[int]] = {}
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -50,7 +74,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _fetch(self) -> dict[str, Any]:
         """Blocking fetch, runs in the executor."""
-        self.client.login()
+        self.client.ensure_login()
         children = self.client.get_children()
         overrides: dict[str, int] = self.config_entry.options.get(OPTION_SCHOOL_IDS, {})
 
@@ -96,6 +120,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             child.update(summarize_calendar(events, now))
             child.update(summarize_care(care.get(child["id"], {}), now.date()))
             child.update(summarize_absences(absences, child["id"], now))
+            child.update(summarize_menu(child.get("food") or {}, now))
 
             if child["id"] is not None and child["school_id"] is not None:
                 child.update(self._fetch_school_data(child))

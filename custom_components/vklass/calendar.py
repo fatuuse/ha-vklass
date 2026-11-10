@@ -9,7 +9,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import VklassConfigEntry
-from .const import CALENDAR_CATEGORIES, OPTION_CALENDAR_CATEGORIES
+from .const import CALENDAR_CATEGORIES, OPTION_CALENDAR_CATEGORIES, OPTION_HIDE_MULTIDAY_ALLDAY
+from .summaries import is_multiday_all_day
 from .coordinator import VklassCoordinator
 from .entity import VklassChildEntity
 
@@ -39,7 +40,7 @@ def _to_calendar_event(event: dict[str, Any]) -> CalendarEvent:
 
 class VklassChildCalendar(VklassChildEntity, CalendarEntity):
     _attr_icon = "mdi:calendar-account"
-    _attr_name = "Schedule"
+    _attr_translation_key = "schedule"
 
     def __init__(self, coordinator: VklassCoordinator, entry: VklassConfigEntry, child_key: str) -> None:
         super().__init__(coordinator, entry, child_key, "schedule")
@@ -48,6 +49,9 @@ class VklassChildCalendar(VklassChildEntity, CalendarEntity):
     def _allowed(self) -> set[str]:
         return set(self._entry.options.get(OPTION_CALENDAR_CATEGORIES, CALENDAR_CATEGORIES))
 
+    def _hidden(self, event: dict[str, Any]) -> bool:
+        return bool(self._entry.options.get(OPTION_HIDE_MULTIDAY_ALLDAY, False)) and is_multiday_all_day(event)
+
     @property
     def event(self) -> CalendarEvent | None:
         """The next event that has not ended yet, from the coordinator's 7-day window."""
@@ -55,7 +59,7 @@ class VklassChildCalendar(VklassChildEntity, CalendarEntity):
         allowed = self._allowed()
         best: dict[str, Any] | None = None
         for raw in self.child.get("calendar_events") or []:
-            if raw["category"] not in allowed or raw["cancelled"]:
+            if raw["category"] not in allowed or raw["cancelled"] or self._hidden(raw):
                 continue
             end = datetime.fromisoformat(raw["end"]) if raw.get("end") else datetime.fromisoformat(raw["start"])
             if end >= now and (best is None or raw["start"] < best["start"]):
@@ -73,7 +77,7 @@ class VklassChildCalendar(VklassChildEntity, CalendarEntity):
         return [
             _to_calendar_event(e)
             for e in raw_events
-            if e["category"] in allowed and not e["cancelled"]
+            if e["category"] in allowed and not e["cancelled"] and not self._hidden(e)
         ]
 
 

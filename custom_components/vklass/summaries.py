@@ -4,7 +4,7 @@ No Home Assistant imports here, so these functions can be tested without Home As
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from .const import GYM_CATEGORY, GYM_KEYWORD, LESSON_CATEGORIES, SESSION_SEPARATOR
@@ -156,3 +156,78 @@ def summarize_absences(
         datetime.fromisoformat(a["start"]) <= now <= datetime.fromisoformat(a["end"]) for a in items
     )
     return {"absences": items[:20], "absences_upcoming": len(upcoming), "absent_now": absent_now}
+
+
+def is_multiday_all_day(event: dict[str, Any]) -> bool:
+    """True for all-day events that span more than one day, such as a whole term or a plan."""
+    if not event.get("all_day") or not event.get("end"):
+        return False
+    start = datetime.fromisoformat(event["start"])
+    end = datetime.fromisoformat(event["end"])
+    return end - start > timedelta(days=1)
+
+
+def _has_care(child: dict[str, Any]) -> bool:
+    return bool(child.get("care_schedule") or child.get("caretime") or child.get("check"))
+
+
+# Entities that only make sense for some children. Everything else is enabled.
+ENTITY_RELEVANCE = {
+    "care_today": _has_care,
+    "care_tomorrow": _has_care,
+    "care_time": _has_care,
+    "attendance": _has_care,
+    "report_absence": lambda child: False,
+}
+
+
+def entity_enabled_by_default(child: dict[str, Any], key: str) -> bool:
+    """Whether an entity is enabled when it is first registered.
+
+    Only applies to new entities. Users can enable any entity later in Home Assistant.
+    """
+    rule = ENTITY_RELEVANCE.get(key)
+    return True if rule is None else rule(child)
+
+
+_WEEKDAYS = {"måndag": 0, "tisdag": 1, "onsdag": 2, "torsdag": 3, "fredag": 4, "lördag": 5, "söndag": 6}
+
+
+def _label_date(label: str, today: date) -> date | None:
+    """The date a menu label refers to: Idag, Imorgon, or the next occurrence of a weekday."""
+    text = label.strip().lower()
+    if text == "idag":
+        return today
+    if text == "imorgon":
+        return today + timedelta(days=1)
+    if text in _WEEKDAYS:
+        return today + timedelta(days=(_WEEKDAYS[text] - today.weekday()) % 7)
+    return None
+
+
+MENU_SWITCH_TIME = time(15, 0)
+
+
+def summarize_menu(food: dict[str, list[str]], now: datetime) -> dict[str, Any]:
+    """The lunch to show, every day as an attribute.
+
+    Until MENU_SWITCH_TIME the state is today's lunch. From then on it is the next day that has a menu.
+    """
+    today = now.date()
+    days = [
+        {"date": day.isoformat() if day else None, "label": label, "items": items}
+        for label, items in food.items()
+        for day in [_label_date(label, today)]
+    ]
+    days.sort(key=lambda d: d["date"] or "9999-12-31")
+
+    first_day = today if now.time() < MENU_SWITCH_TIME else today + timedelta(days=1)
+    shown = next(
+        (d for d in days if d["date"] and d["items"] and date.fromisoformat(d["date"]) >= first_day),
+        None,
+    )
+    return {
+        "menu_state": " / ".join(shown["items"]) if shown else None,
+        "menu_date": shown["date"] if shown else None,
+        "menu_days": days,
+    }
