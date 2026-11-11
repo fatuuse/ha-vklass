@@ -1,0 +1,34 @@
+name: Update manifest version
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update manifest
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+
+          jq --arg version "$VERSION" \
+            '.version = $version' \
+            custom_components/vklass/manifest.json \
+            > manifest.tmp
+
+          mv manifest.tmp custom_components/vklass/manifest.json
+
+      - name: Commit change
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add custom_components/vklass/manifest.json
+          git commit -m "Update version to ${GITHUB_REF_NAME#v}" || exit 0
+          git push
