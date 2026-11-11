@@ -40,6 +40,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client_for_data(entry.data, on_cookie_update=self._on_cookie_update)
         # Options as they were when this coordinator was built. Used to tell option changes from data changes.
         self.applied_options = dict(entry.options)
+        self._discovered: dict[int, list[int]] = {}
 
     def _on_cookie_update(self, cookie: str) -> None:
         """Called from the executor thread when Vklass rotates the session cookie."""
@@ -62,7 +63,6 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.config_entry.async_start_reauth(self.hass)
         except VklassConnectionError as err:
             _LOGGER.debug("Vklass keepalive failed: %s", err)
-        self._discovered: dict[int, list[int]] = {}
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:

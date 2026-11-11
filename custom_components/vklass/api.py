@@ -111,6 +111,7 @@ class VklassClient:
             self._authenticated = True
             return
         try:
+            self._session.cookies.clear()
             page = self._session.get(LOGIN_PAGE, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as err:
             raise VklassConnectionError(str(err)) from err

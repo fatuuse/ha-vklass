@@ -279,10 +279,21 @@ class VklassConfigFlow(ConfigFlow, domain=DOMAIN):
 class VklassOptionsFlow(OptionsFlow):
     """The same settings as during setup, changed later under Configure."""
 
+    def _children(self) -> dict[str, dict[str, Any]]:
+        """Children of the loaded integration. Empty if setup failed, so the flow still opens."""
+        runtime = getattr(self.config_entry, "runtime_data", None)
+        if runtime is None or not runtime.data:
+            return {}
+        return runtime.data.get("children", {})
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        children: dict[str, dict[str, Any]] = self.config_entry.runtime_data.data["children"]
+        children = self._children()
         if user_input is not None:
-            return self.async_create_entry(title="", data=settings_from_input(children, user_input))
+            options = settings_from_input(children, user_input)
+            if not children:
+                # No school fields were shown, so keep the school ids that are already stored.
+                options[OPTION_SCHOOL_IDS] = dict(self.config_entry.options.get(OPTION_SCHOOL_IDS, {}))
+            return self.async_create_entry(title="", data=options)
         return self.async_show_form(
             step_id="init",
             data_schema=settings_schema(children, dict(self.config_entry.options)),
