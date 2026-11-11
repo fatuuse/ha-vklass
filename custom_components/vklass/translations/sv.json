@@ -5,7 +5,7 @@
         "title": "Vklass",
         "description": "Välj hur du vill logga in på Vklass.",
         "data": {
-          "auth_method": "Inloggningssätt"
+          "auth_method": "Autentisering metod"
         }
       },
       "password": {

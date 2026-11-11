@@ -5,7 +5,7 @@
         "title": "Vklass",
         "description": "Choose how to log in to Vklass.",
         "data": {
-          "auth_method": "Login method"
+          "auth_method": "Auth. method"
         }
       },
       "password": {
