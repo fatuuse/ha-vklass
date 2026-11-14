@@ -1,4 +1,76 @@
+## 0.2.0
+
+First release on the new version line. It contains all changes from the 0.1.0 alpha series:
+
+- Login with username and password, or with the Vklass session cookie (works with BankID).
+- Keepalive against the scoreboard every 10 minutes, saving of a rotated cookie.
+- Children found automatically from the welcome page, keyed by student id.
+- School ids found automatically, with a choice in setup and under Configure when several are found.
+- One calendar per child, with category filter and option to hide multi-day all-day events.
+- Sensors: Omsorgstid with a Monday-to-Friday week list, Lunch (today until 15:00, then the next menu day),
+  attendance, next lesson with overlapping lessons, merit value, current grades, active courses,
+  course attendance, upcoming absences, news, unread messages and notifications.
+- Binary sensors: gym today and tomorrow, holiday confirmation needed, absent now.
+- Button per child to report an absence for today (disabled by default).
+- Entities that cannot have data for a child start disabled.
+- Translated entity names and setup/options labels in Swedish and English.
+- Diagnostics download without names, ids or credentials.
+- Debug logging for logins, session checks and every page fetch, without credentials or ids.
+
 # Changelog
+
+## 0.1.0-alpha.18
+
+- The Omsorgstid sensor has an attribute `week` with Monday to Friday of the current week, each day with
+  its date, its times, and whether the child is on leave or the school is closed.
+- Debug logs for every page fetch: the path (ids masked), HTTP status and size, plus what was found on the page
+  (for example number of children, subjects, absences or calendar events).
+- Debug logs for every login outcome: which method was used, why a sign-in failed (including HTTP 200,
+  which often means a blocked request), and when a session check triggers a new login. Credentials and
+  cookie values are never logged.
+- A debug log line per child says whether the care schedule was found, to help diagnose Unknown care states.
+
+## 0.1.0-alpha.17
+
+Seven changes from a code review:
+
+1. Credentials are stripped of surrounding whitespace before validation and storage.
+   A pasted trailing newline or space no longer causes "Wrong username or password".
+2. A realistic browser User-Agent is sent on every request, so WAF rules that block
+   the default python-requests UA do not silently look like wrong credentials.
+3. Unexpected parse errors (ValueError / IndexError / AttributeError / KeyError) in
+   get_children, parse_care_schedule, parse_grades, parse_courses and parse_absences
+   are caught and re-raised as VklassConnectionError with a clear message.
+4. _fetch() measures its own wall time and logs it at debug level. A warning is emitted
+   if a refresh takes longer than 60 seconds.
+5. Per-child entities are removed when a child disappears from the account.
+   async_track_child_removal() in entity.py is called by all four platforms.
+6. The news sensor's extra_state_attributes caps articles at 10 and truncates intro
+   text to 200 characters. A count key is added.
+7. async_migrate_entry() stub added so future config schema changes have a home.
+
+## 0.1.0-alpha.16
+
+Found and fixed during a full code review, no new features:
+
+- Fixed: the calendar's `async_get_events` sent Home Assistant's requested date range straight to
+  Vklass. Home Assistant can pass this in UTC, which could land on the wrong day near local midnight.
+  The range is now converted to local time first.
+- Removed dead code in `get_children()` that looked for a grade link on the welcome page. Real welcome
+  pages do not contain that link (confirmed against an actual page earlier), so it always matched
+  nothing. School ids come entirely from the automatic discovery added in 0.1.0-alpha.7/0.1.0-alpha.8.
+- Cosmetic: a formatting defect from an earlier patch glued two entity descriptions together on one
+  line in `binary_sensor.py`. It was valid Python and did not change behaviour, but has been cleaned up.
+- Removed an unused import in `sensor.py`.
+
+## 0.1.0-alpha.15
+
+- Fixed: the coordinator crashed on every update with `AttributeError: _discovered` (the attribute was set at
+  the wrong place). Every update failed, so entities became unavailable.
+- Fixed: the Configure dialog returned a 500 error when the integration had not loaded. It now opens, and
+  saving keeps the stored school ids.
+- Password login starts from an empty cookie jar, so an old session cannot make the login fail.
+- Clearer labels: "Auth. method" / "Autentisering metod", calendar categories and multi-day hiding in both languages.
 
 ## 0.1.0-alpha.14
 
