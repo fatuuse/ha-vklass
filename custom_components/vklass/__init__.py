@@ -1,6 +1,8 @@
 """The Vklass integration."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -12,6 +14,16 @@ from .coordinator import VklassCoordinator
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CALENDAR, Platform.BUTTON]
 
 type VklassConfigEntry = ConfigEntry[VklassCoordinator]
+
+_LOGGER = logging.getLogger(__name__)
+
+CONFIG_VERSION = 1
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: VklassConfigEntry) -> bool:
+    """Migrate old config entries. Only version 1 exists so far, so nothing needs converting."""
+    _LOGGER.debug("Vklass config entry is at version %s", entry.version)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: VklassConfigEntry) -> bool:

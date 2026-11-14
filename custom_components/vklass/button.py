@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import VklassConfigEntry
 from .api import VklassAuthError, VklassConnectionError
 from .coordinator import VklassCoordinator
-from .entity import VklassChildEntity
+from .entity import VklassChildEntity, async_track_child_removal
 
 
 class VklassReportAbsenceButton(VklassChildEntity, ButtonEntity):
@@ -49,8 +49,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        VklassReportAbsenceButton(coordinator, entry, key)
+    entities_by_child: dict[str, list] = {
+        key: [VklassReportAbsenceButton(coordinator, entry, key)]
         for key, child in coordinator.data["children"].items()
         if child["id"] is not None
-    )
+    }
+    async_add_entities(e for elist in entities_by_child.values() for e in elist)
+    async_track_child_removal(coordinator, entry, entities_by_child)

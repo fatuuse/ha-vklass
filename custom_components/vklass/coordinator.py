@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -58,6 +59,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Ping Vklass so the session does not expire from inactivity."""
         try:
             await self.hass.async_add_executor_job(self.client.ping)
+            _LOGGER.debug("Keepalive: scoreboard ping succeeded")
         except VklassAuthError:
             _LOGGER.warning("The Vklass session has expired, re-authentication is needed")
             self.config_entry.async_start_reauth(self.hass)
@@ -74,6 +76,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _fetch(self) -> dict[str, Any]:
         """Blocking fetch, runs in the executor."""
+        _t0 = time.monotonic()
         self.client.ensure_login()
         children = self.client.get_children()
         overrides: dict[str, int] = self.config_entry.options.get(OPTION_SCHOOL_IDS, {})
@@ -101,9 +104,11 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # A broken care page should not take calendar and news down with it.
         try:
             care = self.client.get_care_schedule()
+            care_error = None
         except VklassConnectionError as err:
             _LOGGER.warning("Could not fetch care schedule: %s", err)
             care = {}
+            care_error = str(err)
 
         now = datetime.now()
         try:
@@ -119,6 +124,12 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             child["calendar_events"] = events
             child.update(summarize_calendar(events, now))
             child.update(summarize_care(care.get(child["id"], {}), now.date()))
+            if care_error is not None:
+                _LOGGER.debug("Care status for student %s: error: %s", child["id"], care_error)
+            elif child["id"] not in care:
+                _LOGGER.debug("Care status for student %s: no care schedule found", child["id"])
+            else:
+                _LOGGER.debug("Care status for student %s: ok", child["id"])
             child.update(summarize_absences(absences, child["id"], now))
             child.update(summarize_menu(child.get("food") or {}, now))
 
@@ -131,6 +142,13 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("Could not fetch scoreboard: %s", err)
             scoreboard = {}
 
+        _elapsed = time.monotonic() - _t0
+        _LOGGER.debug("Vklass refresh completed in %.1f s (%d children)", _elapsed, len(children))
+        if _elapsed > 60:
+            _LOGGER.warning(
+                "Vklass refresh took %.0f s. Enable debug logging to see per-step timing.",
+                _elapsed,
+            )
         return {
             "children": children,
             "news": self.client.get_news(),

@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import VklassConfigEntry
 from .coordinator import VklassCoordinator
-from .entity import VklassChildEntity
+from .entity import VklassChildEntity, async_track_child_removal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,7 +44,8 @@ CHILD_BINARY_SENSORS: tuple[VklassChildBinarySensorDescription, ...] = (
         device_class=BinarySensorDeviceClass.PROBLEM,
         value_fn=lambda c: bool(c.get("pending_holidays")),
         attrs_fn=lambda c: {"holidays": c.get("pending_holidays") or []},
-    ),    VklassChildBinarySensorDescription(
+    ),
+    VklassChildBinarySensorDescription(
         key="absent_now",
         translation_key="absent_now",
         icon="mdi:account-off",
@@ -83,8 +84,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        VklassChildBinarySensor(coordinator, entry, child_name, description)
-        for child_name in coordinator.data["children"]
-        for description in CHILD_BINARY_SENSORS
-    )
+    entities_by_child: dict[str, list] = {
+        key: [VklassChildBinarySensor(coordinator, entry, key, d) for d in CHILD_BINARY_SENSORS]
+        for key in coordinator.data["children"]
+    }
+    async_add_entities(e for child_entities in entities_by_child.values() for e in child_entities)
+    async_track_child_removal(coordinator, entry, entities_by_child)

@@ -59,3 +59,9 @@ KEEPALIVE_INTERVAL = timedelta(minutes=10)
 
 # Hide all-day events that span several days (for example a term or a plan) from the calendar.
 OPTION_HIDE_MULTIDAY_ALLDAY = "hide_multiday_all_day"
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0 Safari/537.36"
+)

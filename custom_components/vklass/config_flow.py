@@ -179,7 +179,7 @@ class VklassConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             username = user_input[DATA_USERNAME].strip()
-            password = user_input[DATA_PASSWORD]
+            password = user_input[DATA_PASSWORD].strip()
 
             await self.async_set_unique_id(username.lower())
             self._abort_if_unique_id_configured()
@@ -251,7 +251,7 @@ class VklassConfigFlow(ConfigFlow, domain=DOMAIN):
                     await self.hass.async_add_executor_job(_children_for_cookie, cookie)
                     updates: dict[str, Any] = {DATA_COOKIE: cookie}
                 else:
-                    password = user_input[DATA_PASSWORD]
+                    password = user_input[DATA_PASSWORD].strip()
                     await self.hass.async_add_executor_job(
                         _validate_password, entry.data[DATA_USERNAME], password
                     )
