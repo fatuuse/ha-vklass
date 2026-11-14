@@ -97,6 +97,94 @@ time until 23:59 the same day.
 - Check the result in Vklass the first time you use it. Reports go straight to the school.
 - A report made from a time after the school's cut-off is rejected by Vklass, and the button shows an error.
 
+## Suggested notifications
+
+These are examples for automations in Home Assistant. They are not part of the integration, so copy
+them and change them as you like. The entity ids depend on the language Home Assistant used when the
+entities were created. Check them under **Settings → Devices & services → Entities** and replace them
+if yours differ.
+
+### Unread messages or notifications
+
+Notifies you when Vklass has unread messages or notifications. Tapping the notification opens Vklass.
+
+```yaml
+alias: Vklass - unread messages
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.vklass_unread_messages
+    above: 0
+  - platform: numeric_state
+    entity_id: sensor.vklass_notifications
+    above: 0
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "Vklass"
+      message: "You have unread messages or notifications in Vklass."
+      data:
+        clickAction: "https://custodian.vklass.se"
+mode: queued
+```
+
+### New news article
+
+Notifies you when a new article appears, and opens the article when you tap the notification. The
+news sensor's state is the number of articles, and its newest article is the first one in `articles`.
+
+```yaml
+alias: Vklass - new news
+trigger:
+  - platform: state
+    entity_id: sensor.vklass_news_last_3_days
+condition:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state.state | int(0) > trigger.from_state.state | int(0) }}
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "New in Vklass"
+      message: "{{ state_attr('sensor.vklass_news_last_3_days', 'articles')[0].title }}"
+      data:
+        clickAction: "{{ state_attr('sensor.vklass_news_last_3_days', 'articles')[0].url }}"
+mode: queued
+```
+
+### Evening reminder: gym clothes for tomorrow
+
+At 19:00, lists every child who has gym tomorrow, and reminds you to pack gym clothes. Nothing is sent
+on evenings when no child has gym.
+
+```yaml
+alias: Vklass - gym clothes tomorrow
+trigger:
+  - platform: time
+    at: "19:00:00"
+variables:
+  children_with_gym: >-
+    {{ states.binary_sensor
+       | selectattr('entity_id', 'search', 'gympa_imorgon|gym_tomorrow')
+       | selectattr('state', 'eq', 'on')
+       | map(attribute='name')
+       | map('replace', ' Gympa imorgon', '')
+       | map('replace', ' Gym tomorrow', '')
+       | list }}
+condition:
+  - condition: template
+    value_template: "{{ children_with_gym | length > 0 }}"
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "Gym tomorrow"
+      message: >-
+        Pack gym clothes for: {{ children_with_gym | join(', ') }}.
+mode: single
+```
+
+Replace `notify.mobile_app_your_phone` with your own notify service. You can find it under
+**Developer tools → Actions** by searching for `notify.mobile`.
+
 ## Known limitations
 
 - **School ids are discovered from Vklass responses.** If Vklass does not return one, the grades and

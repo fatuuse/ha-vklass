@@ -6,6 +6,8 @@ import json
 import logging
 import re
 import threading
+import time
+from urllib.parse import urljoin
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any
@@ -93,6 +95,7 @@ class VklassClient:
         self._session.headers.update({"User-Agent": USER_AGENT})
         self._lock = threading.RLock()
         self._authenticated = False
+        self._last_login = 0.0
         if cookie is not None:
             self._session.cookies.set(COOKIE_NAME, cookie, domain=COOKIE_DOMAIN, path="/")
             self._authenticated = True
@@ -150,7 +153,20 @@ class VklassClient:
 
         if response.status_code == 302:
             _LOGGER.debug("Login succeeded with username and password (HTTP 302)")
+            location = response.headers.get("Location", "")
+            if location:
+                # The browser follows this redirect, and that is what sets the site session
+                target = urljoin(LOGIN_SIGNIN, location)
+                try:
+                    followed = self._session.get(target, allow_redirects=True, timeout=REQUEST_TIMEOUT)
+                except requests.RequestException as err:
+                    raise VklassConnectionError(str(err)) from err
+                _LOGGER.debug(
+                    "Login: followed the sign-in redirect to %s (HTTP %s)",
+                    _path(target), followed.status_code,
+                )
             self._authenticated = True
+            self._last_login = time.monotonic()
             return
         if response.status_code == 200:
             # 200 is also what a blocked request can look like, so the log says both possibilities
@@ -177,6 +193,14 @@ class VklassClient:
         if response.status_code != 200:
             # Session most likely expired (redirect to login). Log in once and retry.
             if retry and response.status_code in (302, 401, 403):
+                if self._cookie is None and time.monotonic() - self._last_login < 30:
+                    _LOGGER.debug(
+                        "Session check: HTTP %s on %s right after a sign-in. Not signing in again",
+                        response.status_code, _path(url),
+                    )
+                    raise VklassConnectionError(
+                        "The session did not hold after sign-in. See the debug log for details"
+                    )
                 _LOGGER.debug(
                     "Session check: %s on %s returned HTTP %s, logging in again",
                     method, _path(url), response.status_code,
@@ -369,10 +393,21 @@ class VklassClient:
         return parsed
 
     def discover_school_ids(self, student_id: int) -> list[int]:
-        """Return the school id(s) the student's courses belong to. Empty if none can be read."""
+        """Return the school id(s) the student's courses belong to. Empty if none can be read.
+
+        This is a best-effort lookup. It never signs in again: a 403 here means Vklass refuses
+        the request without a school id, not that the session has expired.
+        """
         try:
-            school_id = self.get_courses(student_id).get("school_id")
-        except VklassConnectionError:
+            page = self._request(
+                "GET",
+                f"{BASE_URL}/StudyOverview/Courses/{student_id}",
+                params={"X-Requested-With": "XMLHttpRequest"},
+                retry=False,
+            ).text
+            school_id = parse_courses(page).get("school_id")
+        except (VklassConnectionError, VklassAuthError) as err:
+            _LOGGER.debug("School id discovery found nothing (%s), no sign-in is repeated", type(err).__name__)
             return []
         return [int(school_id)] if school_id else []
 
