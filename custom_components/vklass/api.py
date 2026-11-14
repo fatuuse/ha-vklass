@@ -34,6 +34,7 @@ from .const import (
     NEWS_URL,
     REQUEST_TIMEOUT,
     SCOREBOARD_URL,
+    USER_AGENT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ class VklassClient:
         self._cookie = cookie
         self._on_cookie_update = on_cookie_update
         self._session = requests.Session()
+        self._session.headers.update({"User-Agent": USER_AGENT})
         self._lock = threading.RLock()
         self._authenticated = False
         if cookie is not None:
@@ -104,22 +106,30 @@ class VklassClient:
         with self._lock:
             if not self._authenticated:
                 self._login()
+            else:
+                _LOGGER.debug("Login: session already active, no sign-in needed")
 
     def _login(self) -> None:
         if self._cookie is not None:
             # Cookie sessions cannot be renewed here. An expired cookie is reported as an auth error.
+            _LOGGER.debug("Login: using the session cookie, no sign-in request needed")
             self._authenticated = True
             return
+        _LOGGER.debug("Login: starting sign-in with username and password")
         try:
             self._session.cookies.clear()
             page = self._session.get(LOGIN_PAGE, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as err:
+            _LOGGER.debug("Login failed: could not reach the login page (%s)", type(err).__name__)
             raise VklassConnectionError(str(err)) from err
         if page.status_code != 200:
+            _LOGGER.debug("Login failed: login page returned HTTP %s", page.status_code)
             raise VklassConnectionError(f"Login page returned HTTP {page.status_code}")
+        _LOGGER.debug("Login: login page read (HTTP %s)", page.status_code)
 
         token = TOKEN_RE.search(page.text)
         if token is None:
+            _LOGGER.debug("Login failed: no verification token on the login page")
             raise VklassConnectionError("Verification token not found on login page")
 
         try:
@@ -135,14 +145,21 @@ class VklassClient:
                 timeout=REQUEST_TIMEOUT,
             )
         except requests.RequestException as err:
+            _LOGGER.debug("Login failed: the sign-in request could not be sent (%s)", type(err).__name__)
             raise VklassConnectionError(str(err)) from err
 
         if response.status_code == 302:
-            _LOGGER.debug("Logged in to Vklass")
+            _LOGGER.debug("Login succeeded with username and password (HTTP 302)")
             self._authenticated = True
             return
         if response.status_code == 200:
+            # 200 is also what a blocked request can look like, so the log says both possibilities
+            _LOGGER.debug(
+                "Login rejected: sign-in returned HTTP 200. Either the credentials are wrong, "
+                "or the request was blocked before it reached the login check"
+            )
             raise VklassAuthError("Wrong username or password")
+        _LOGGER.debug("Login failed: sign-in returned HTTP %s", response.status_code)
         raise VklassConnectionError(f"Login returned HTTP {response.status_code}")
 
     def _request(self, method: str, url: str, *, retry: bool = True, **kwargs: Any) -> requests.Response:
@@ -160,12 +177,20 @@ class VklassClient:
         if response.status_code != 200:
             # Session most likely expired (redirect to login). Log in once and retry.
             if retry and response.status_code in (302, 401, 403):
-                _LOGGER.debug("Vklass session expired, logging in again")
+                _LOGGER.debug(
+                    "Session check: %s on %s returned HTTP %s, logging in again",
+                    method, _path(url), response.status_code,
+                )
                 self.login()
                 return self._request(method, url, retry=False, **kwargs)
             if response.status_code in (302, 401, 403) and self._cookie is not None:
+                _LOGGER.debug(
+                    "Session check failed: the cookie was refused on %s (HTTP %s), re-authentication is needed",
+                    _path(url), response.status_code,
+                )
                 raise VklassAuthError("The Vklass session cookie has expired")
             raise VklassConnectionError(f"{url} returned HTTP {response.status_code}")
+        _LOGGER.debug("Fetched %s (HTTP %s, %d characters)", _path(url), response.status_code, len(response.text))
         self._sync_cookie()
         return response
 
@@ -176,7 +201,12 @@ class VklassClient:
         a readable card get a placeholder name, so they still get their data.
         """
         page = self._request("GET", HOME_URL).text
-        grade_links = {int(s): int(school) for s, school in GRADES_LINK_RE.findall(page)}
+        try:
+            return self._parse_children(page)
+        except (ValueError, IndexError, AttributeError) as err:
+            raise VklassConnectionError("Could not parse the Vklass welcome page") from err
+
+    def _parse_children(self, page: str) -> dict[str, dict[str, Any]]:
         children: dict[str, dict[str, Any]] = {}
 
         for block in CHILD_CARD_RE.findall(page):
@@ -192,7 +222,7 @@ class VklassClient:
             children[str(student_id)] = {
                 "name": html.unescape(names[0]).strip(),
                 "id": student_id,
-                "school_id": grade_links.get(student_id),
+                "school_id": None,
                 "caretime": caretime[0].replace("&#x2013;", "-").replace(" ", "") if caretime else None,
                 "check": html.unescape(check[0]) if check else None,
                 "food": _parse_food(block),
@@ -206,7 +236,7 @@ class VklassClient:
             children[key] = {
                 "name": f"Student {student_id}",
                 "id": student_id,
-                "school_id": grade_links.get(student_id),
+                "school_id": None,
                 "caretime": None,
                 "check": None,
                 "food": {},
@@ -214,6 +244,7 @@ class VklassClient:
 
         _LOGGER.debug("Found %d children on the welcome page", len(children))
         return children
+    # end of _parse_children – the VklassConnectionError catch is in get_children
 
     def get_news(self) -> list[dict[str, Any]]:
         """Return news articles published within the last NEWS_DAYS days."""
@@ -249,6 +280,7 @@ class VklassClient:
                 "files": len(article.get("files") or []),
                 "children": [c.get("name") for c in article.get("children") or []],
             })
+        _LOGGER.debug("News: %d articles in the last %d days", len(news), NEWS_DAYS)
         return news
 
     def get_calendar(
@@ -302,12 +334,15 @@ class VklassClient:
                 "cancelled": bool(raw.get("cancelled")),
                 "all_day": bool(raw.get("allDay")),
             })
+        _LOGGER.debug("Calendar: %d events in the requested window", len(events))
         return events
 
     def get_care_schedule(self) -> dict[int, dict[str, Any]]:
         """Return care schedule and holidays per student id."""
         page = self._request("GET", CARE_URL).text
-        return parse_care_schedule(page)
+        children = parse_care_schedule(page)
+        _LOGGER.debug("Care schedule: %d children with schedule data", len(children))
+        return children
 
     def get_grades(self, student_id: int, school_id: int) -> dict[str, Any]:
         """Return grades per subject and term, plus merit values, for one student."""
@@ -316,7 +351,9 @@ class VklassClient:
             f"{BASE_URL}/StudyOverview/Grades/{student_id}",
             params={"school": school_id, "X-Requested-With": "XMLHttpRequest"},
         ).text
-        return parse_grades(page)
+        parsed = parse_grades(page)
+        _LOGGER.debug("Grades: %d subjects, %d merit values", len(parsed["subjects"]), len(parsed["merit"]))
+        return parsed
 
     def get_courses(self, student_id: int, school_id: int | None = None) -> dict[str, Any]:
         """Return subjects with judgements, attendance and criteria for one student.
@@ -327,7 +364,9 @@ class VklassClient:
         if school_id is not None:
             params["school"] = school_id
         page = self._request("GET", f"{BASE_URL}/StudyOverview/Courses/{student_id}", params=params).text
-        return parse_courses(page)
+        parsed = parse_courses(page)
+        _LOGGER.debug("Courses: %d subjects", len(parsed["courses"]))
+        return parsed
 
     def discover_school_ids(self, student_id: int) -> list[int]:
         """Return the school id(s) the student's courses belong to. Empty if none can be read."""
@@ -401,7 +440,9 @@ class VklassClient:
     def get_absences(self) -> dict[int, list[dict[str, Any]]]:
         """Return current and upcoming absence reports per student id (read-only)."""
         page = self._request("GET", ABSENCE_URL).text
-        return parse_absences(page)
+        parsed = parse_absences(page)
+        _LOGGER.debug("Absences: %d students with reports", len(parsed))
+        return parsed
 
     def get_scoreboard(self) -> dict[str, Any]:
         """Return unread counters, e.g. {"notifications": 0, "messages": 0}."""
@@ -417,6 +458,7 @@ class VklassClient:
             raise VklassAuthError("Scoreboard did not return JSON; the session has probably expired") from err
         if not isinstance(data, dict):
             raise VklassConnectionError("Unexpected scoreboard format")
+        _LOGGER.debug("Scoreboard: keys %s", sorted(data))
         return data
 
 
@@ -438,44 +480,46 @@ def parse_care_schedule(page: str) -> dict[int, dict[str, Any]]:
     except ValueError as err:
         raise VklassConnectionError("Could not decode care schedule data") from err
 
-    closed_by_school = {int(k): set(v) for k, v in (model.get("schoolClosedData") or {}).items()}
-    holidays_by_school = {int(k): v for k, v in (model.get("schoolHolidayData") or {}).items()}
+    try:
+        closed_by_school = {int(k): set(v) for k, v in (model.get("schoolClosedData") or {}).items()}
+        holidays_by_school = {int(k): v for k, v in (model.get("schoolHolidayData") or {}).items()}
+    
+        children: dict[int, dict[str, Any]] = {}
+        for item in model.get("childInSchoolItems") or []:
+            student_id = item["student"]["id"]
+            school_id = item["schoolId"]
+            holiday_state = item.get("holidayData") or {}
+    
+            holidays = []
+            for holiday in holidays_by_school.get(school_id, []):
+                key = str(holiday.get("holidayId"))
+                if key in holiday_state:
+                    holidays.append({
+                        "name": holiday.get("name"),
+                        "start": holiday.get("startDate"),
+                        "end": holiday.get("endDate"),
+                        "confirm_by": holiday.get("confirmationDeadlineDate"),
+                        "confirmed": bool(holiday_state[key].get("isConfirmed")),
+                    })
+            children[student_id] = {"holidays": holidays, "schedule": {}}
+    
+        for day in model.get("scheduleData") or []:
+            student_id = day.get("studentId")
+            if student_id not in children:
+                continue
+            date_str = day["date"]
+            children[student_id]["schedule"][date_str] = {
+                "start": day.get("startTime"),
+                "end": day.get("endTime"),
+                "on_leave": bool(day.get("isOnLeave")),
+                "closed": date_str in closed_by_school.get(day.get("schoolId"), set()),
+                "message": (day.get("message") or "").strip() or None,
+            }
+        return children
+    except (ValueError, IndexError, AttributeError, KeyError) as err:
+        raise VklassConnectionError("Could not parse care schedule data") from err
 
-    children: dict[int, dict[str, Any]] = {}
-    for item in model.get("childInSchoolItems") or []:
-        student_id = item["student"]["id"]
-        school_id = item["schoolId"]
-        holiday_state = item.get("holidayData") or {}
 
-        holidays = []
-        for holiday in holidays_by_school.get(school_id, []):
-            key = str(holiday.get("holidayId"))
-            if key in holiday_state:
-                holidays.append({
-                    "name": holiday.get("name"),
-                    "start": holiday.get("startDate"),
-                    "end": holiday.get("endDate"),
-                    "confirm_by": holiday.get("confirmationDeadlineDate"),
-                    "confirmed": bool(holiday_state[key].get("isConfirmed")),
-                })
-        children[student_id] = {"holidays": holidays, "schedule": {}}
-
-    for day in model.get("scheduleData") or []:
-        student_id = day.get("studentId")
-        if student_id not in children:
-            continue
-        date_str = day["date"]
-        children[student_id]["schedule"][date_str] = {
-            "start": day.get("startTime"),
-            "end": day.get("endTime"),
-            "on_leave": bool(day.get("isOnLeave")),
-            "closed": date_str in closed_by_school.get(day.get("schoolId"), set()),
-            "message": (day.get("message") or "").strip() or None,
-        }
-    return children
-
-
-GRADES_LINK_RE = re.compile(r"StudyOverview/Grades/(\d+)\?school=(\d+)")
 GRADES_JSON_RE = re.compile(r"enhanceServerHtml\('results-gradeselementaryschool',.*?'(\{.*?\})',\s*'", re.S)
 TERM_HEADER_RE = re.compile(r'order-by-property="gradeOrderTerm(\d)" text="([^"]*)"')
 MERIT_ROW_RE = re.compile(r"Meritvärde</div>(.*?)meritRowDetail", re.S)
@@ -492,31 +536,34 @@ def parse_grades(page: str) -> dict[str, Any]:
     except ValueError as err:
         raise VklassConnectionError("Could not decode grades data") from err
 
-    # Term labels come from the column headers, gradeTerm1..5 in chronological order
-    header_labels = {int(n): html.unescape(text) for n, text in TERM_HEADER_RE.findall(page)}
-    labels = [header_labels.get(i, f"Term {i}") for i in range(1, 6)]
+    try:
+            # Term labels come from the column headers, gradeTerm1..5 in chronological order
+            header_labels = {int(n): html.unescape(text) for n, text in TERM_HEADER_RE.findall(page)}
+            labels = [header_labels.get(i, f"Term {i}") for i in range(1, 6)]
 
-    subjects: dict[str, dict[str, str]] = {}
-    for item in model.get("items") or []:
-        grades = {}
-        for i, label in enumerate(labels, start=1):
-            value = (item.get(f"gradeTerm{i}") or "").strip()
-            if value:
-                grades[label] = value
-        subjects[item["subjectName"]] = grades
+            subjects: dict[str, dict[str, str]] = {}
+            for item in model.get("items") or []:
+                grades = {}
+                for i, label in enumerate(labels, start=1):
+                    value = (item.get(f"gradeTerm{i}") or "").strip()
+                    if value:
+                        grades[label] = value
+                subjects[item["subjectName"]] = grades
 
-    merit: dict[str, float] = {}
-    row = MERIT_ROW_RE.search(page)
-    if row:
-        for label, value in zip(labels, MERIT_CELL_RE.findall(row.group(1))):
-            value = value.strip()
-            if value and value != "-":
-                try:
-                    merit[label] = float(value.replace(",", "."))
-                except ValueError:
-                    pass
+            merit: dict[str, float] = {}
+            row = MERIT_ROW_RE.search(page)
+            if row:
+                for label, value in zip(labels, MERIT_CELL_RE.findall(row.group(1))):
+                    value = value.strip()
+                    if value and value != "-":
+                        try:
+                            merit[label] = float(value.replace(",", "."))
+                        except ValueError:
+                            pass
 
-    return {"terms": labels, "subjects": subjects, "merit": merit}
+            return {"terms": labels, "subjects": subjects, "merit": merit}
+    except (ValueError, IndexError, AttributeError, KeyError) as err:
+        raise VklassConnectionError("Could not parse grades data") from err
 
 
 COURSES_JSON_RE = re.compile(r"enhanceServerHtml\('studyoverview-courses',.*?'(\{.*?\})',\s*'", re.S)
@@ -543,24 +590,27 @@ def parse_courses(page: str) -> dict[str, Any]:
     except ValueError as err:
         raise VklassConnectionError("Could not decode courses data") from err
 
-    courses: list[dict[str, Any]] = []
-    for item in (model.get("items") or []) + (model.get("inactiveItems") or []):
-        criterias = item.get("criterias") or {}
-        judgement = item.get("judgement") or None
-        date_str = item.get("date")
-        courses.append({
-            "subject": item.get("subjectName"),
-            "active": bool(item.get("courseActive")),
-            "judgement": judgement,
-            # Vklass uses 0001-01-01 as "no date"
-            "judgement_date": date_str if judgement and date_str and not date_str.startswith("0001") else None,
-            "judgement_author": item.get("judgementAuthorFullName"),
-            "published": bool(item.get("isPublished")),
-            "attendance_percent": _percent(item.get("attendancePresentTimePercent")),
-            "criteria_achieved": criterias.get("achievedCriteriasCount"),
-            "criteria_total": criterias.get("totalCriteriasCount"),
-        })
-    return {"courses": courses, "school_id": model.get("schoolId")}
+    try:
+            courses: list[dict[str, Any]] = []
+            for item in (model.get("items") or []) + (model.get("inactiveItems") or []):
+                criterias = item.get("criterias") or {}
+                judgement = item.get("judgement") or None
+                date_str = item.get("date")
+                courses.append({
+                    "subject": item.get("subjectName"),
+                    "active": bool(item.get("courseActive")),
+                    "judgement": judgement,
+                    # Vklass uses 0001-01-01 as "no date"
+                    "judgement_date": date_str if judgement and date_str and not date_str.startswith("0001") else None,
+                    "judgement_author": item.get("judgementAuthorFullName"),
+                    "published": bool(item.get("isPublished")),
+                    "attendance_percent": _percent(item.get("attendancePresentTimePercent")),
+                    "criteria_achieved": criterias.get("achievedCriteriasCount"),
+                    "criteria_total": criterias.get("totalCriteriasCount"),
+                })
+            return {"courses": courses, "school_id": model.get("schoolId")}
+    except (ValueError, IndexError, AttributeError, KeyError) as err:
+        raise VklassConnectionError("Could not parse courses data") from err
 
 
 # The absence page embeds its list as an HTML-escaped JSON object in a template attribute.
@@ -577,25 +627,34 @@ def parse_absences(page: str) -> dict[int, list[dict[str, Any]]]:
     except ValueError as err:
         raise VklassConnectionError("Could not decode absence data") from err
 
-    result: dict[int, list[dict[str, Any]]] = {}
-    for raw in model.get("absences") or []:
-        try:
-            start = datetime.strptime(raw["startDateTime"], "%Y-%m-%d %H:%M").isoformat()
-            end = datetime.strptime(raw["endDateTime"], "%Y-%m-%d %H:%M").isoformat()
-        except (KeyError, TypeError, ValueError):
-            continue
-        result.setdefault(raw.get("studentId"), []).append({
-            "id": raw.get("id"),
-            "start": start,
-            "end": end,
-            "type": raw.get("absenceType"),
-            "created": raw.get("created"),
-            "created_by": raw.get("createdBy"),
-        })
-    return result
+    try:
+            result: dict[int, list[dict[str, Any]]] = {}
+            for raw in model.get("absences") or []:
+                try:
+                    start = datetime.strptime(raw["startDateTime"], "%Y-%m-%d %H:%M").isoformat()
+                    end = datetime.strptime(raw["endDateTime"], "%Y-%m-%d %H:%M").isoformat()
+                except (KeyError, TypeError, ValueError):
+                    continue
+                result.setdefault(raw.get("studentId"), []).append({
+                    "id": raw.get("id"),
+                    "start": start,
+                    "end": end,
+                    "type": raw.get("absenceType"),
+                    "created": raw.get("created"),
+                    "created_by": raw.get("createdBy"),
+                })
+            return result
+    except (ValueError, IndexError, AttributeError, KeyError) as err:
+        raise VklassConnectionError("Could not parse absence data") from err
 
 
 STUDENT_IDS_RE = re.compile(r"studentIds=(\d+)")
+
+
+def _path(url: str) -> str:
+    """The path of a URL, for log messages. Query strings and long numbers (ids) are left out."""
+    path = url.split("?")[0].replace(BASE_URL, "")
+    return re.sub(r"\d{4,}", "<id>", path)
 
 
 def _hidden_value(page: str, element_id: str) -> str | None:

@@ -17,9 +17,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import VklassConfigEntry
-from .const import DOMAIN, NEWS_DAYS
+from .const import DOMAIN
 from .coordinator import VklassCoordinator
-from .entity import VklassChildEntity
+from .entity import VklassChildEntity, async_track_child_removal
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -34,6 +34,7 @@ CHILD_SENSORS: tuple[VklassChildSensorDescription, ...] = (
         translation_key="care_time",
         icon="mdi:clock-outline",
         value_fn=lambda c: c.get("caretime"),
+        attrs_fn=lambda c: {"week": c.get("care_week") or []},
     ),
     VklassChildSensorDescription(
         key="attendance",
@@ -169,7 +170,19 @@ class VklassNewsSensor(CoordinatorEntity[VklassCoordinator], SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"articles": self.coordinator.data.get("news") or []}
+        articles = sorted(
+            self.coordinator.data.get("news") or [],
+            key=lambda a: a.get("publish_date") or "",
+            reverse=True,
+        )[:10]
+        capped = []
+        for article in articles:
+            entry = dict(article)
+            intro = entry.get("intro") or ""
+            if len(intro) > 200:
+                entry["intro"] = intro[:200] + "\u2026"
+            capped.append(entry)
+        return {"count": len(capped), "articles": capped}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -230,12 +243,16 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     entities: list[SensorEntity] = [VklassNewsSensor(coordinator, entry)]
     entities.extend(VklassServiceSensor(coordinator, entry, d) for d in SERVICE_SENSORS)
+    entities_by_child: dict[str, list] = {}
     for child_name, child in coordinator.data["children"].items():
         descriptions = CHILD_SENSORS
         if child.get("school_id") is not None:
             descriptions = (*CHILD_SENSORS, *GRADE_SENSORS, *COURSE_SENSORS)
-        entities.extend(
+        child_entities = list(
             VklassChildSensor(coordinator, entry, child_name, description)
             for description in descriptions
         )
+        entities_by_child[child_name] = child_entities
+        entities.extend(child_entities)
     async_add_entities(entities)
+    async_track_child_removal(coordinator, entry, entities_by_child)

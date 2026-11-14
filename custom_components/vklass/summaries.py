@@ -86,6 +86,20 @@ def _care_state(entry: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+WEEKDAY_NAMES = ["måndag", "tisdag", "onsdag", "torsdag", "fredag"]
+
+
+def current_week(schedule: dict[str, dict[str, Any]], today: date) -> list[dict[str, Any]]:
+    """Monday to Friday of the current week, with the care times for each day."""
+    monday = today - timedelta(days=today.weekday())
+    week = []
+    for offset, weekday in enumerate(WEEKDAY_NAMES):
+        day = monday + timedelta(days=offset)
+        week.append({"date": day.isoformat(), "weekday": weekday,
+                     **_care_state(schedule.get(day.isoformat()))})
+    return week
+
+
 def summarize_care(care: dict[str, Any], today: date) -> dict[str, Any]:
     """Derive today/tomorrow care times and pending holiday confirmations."""
     schedule: dict[str, dict[str, Any]] = care.get("schedule", {})
@@ -95,6 +109,7 @@ def summarize_care(care: dict[str, Any], today: date) -> dict[str, Any]:
     return {
         "care_today": _care_state(schedule.get(today.isoformat())),
         "care_tomorrow": _care_state(schedule.get(tomorrow.isoformat())),
+        "care_week": current_week(schedule, today),
         "care_schedule": [
             {"date": day, **_care_state(entry)} for day, entry in sorted(schedule.items())
         ],

@@ -6,13 +6,14 @@ from typing import Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import VklassConfigEntry
 from .const import CALENDAR_CATEGORIES, OPTION_CALENDAR_CATEGORIES, OPTION_HIDE_MULTIDAY_ALLDAY
 from .summaries import is_multiday_all_day
 from .coordinator import VklassCoordinator
-from .entity import VklassChildEntity
+from .entity import VklassChildEntity, async_track_child_removal
 
 
 def _to_calendar_event(event: dict[str, Any]) -> CalendarEvent:
@@ -72,7 +73,10 @@ class VklassChildCalendar(VklassChildEntity, CalendarEntity):
         """Events for the range Home Assistant asks for, fetched from Vklass."""
         allowed = self._allowed()
         raw_events = await hass.async_add_executor_job(
-            self.coordinator.client.get_calendar, self.child["id"], start_date, end_date
+            self.coordinator.client.get_calendar,
+            self.child["id"],
+            dt_util.as_local(start_date),
+            dt_util.as_local(end_date),
         )
         return [
             _to_calendar_event(e)
@@ -87,8 +91,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        VklassChildCalendar(coordinator, entry, key)
+    entities_by_child: dict[str, list] = {
+        key: [VklassChildCalendar(coordinator, entry, key)]
         for key, child in coordinator.data["children"].items()
         if child["id"] is not None
-    )
+    }
+    async_add_entities(e for elist in entities_by_child.values() for e in elist)
+    async_track_child_removal(coordinator, entry, entities_by_child)
