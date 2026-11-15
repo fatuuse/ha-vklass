@@ -13,7 +13,7 @@ Every child on the account gets a device. Entity names use the child's name.
 
 | Entity | Type | Source |
 | --- | --- | --- |
-| Care today / Care tomorrow | sensor | Care schedule (times, closed, on leave) |
+| Care time / Care tomorrow | sensor | Care schedule. Care time shows today; attribute `week` lists Monday to Friday (the coming week from Saturday on) |
 | Attendance | sensor | Welcome page |
 | Next lesson | sensor | Calendar. Overlapping lessons are joined with ` \| ` |
 | Lunch | sensor | Welcome page. State is today's lunch until 15:00, then tomorrow's. Attribute `days` has every day |
@@ -21,7 +21,7 @@ Every child on the account gets a device. Entity names use the child's name.
 | Current grades | sensor | Grades page (grade school, see below) |
 | Active courses / Course attendance | sensor | Study overview (grade school, see below) |
 | Upcoming absences | sensor | Absence page (read only) |
-| Gym today / Gym tomorrow | binary sensor | Calendar (lecture with code "IDH"; calendar events never count) |
+| Gym today / Gym tomorrow | binary sensor | Calendar (lecture with code IDH, or a title such as Idrott or Gympa; calendar events never count) |
 | Holiday confirmation needed | binary sensor (problem) | Care schedule |
 | Schedule | calendar | Calendar (lessons, events, assignments, plans, vacant days) |
 | Absent now | binary sensor (presence) | Absence page (read only) |
@@ -72,6 +72,17 @@ In the same dialog you can choose which calendar categories appear in the **Sche
 
 Children are found on the Vklass welcome page. A child that is referenced there but has no card
 gets the placeholder name `Student <id>` until its card can be read.
+
+## Refresh schedule
+
+- **Full refresh:** every 8 hours.
+- **Attendance and care times:** every 15 minutes on weekdays from 07:00 to 09:30, so you can see whether a child
+  has arrived.
+- **Keepalive:** every 10 minutes. It only keeps the session alive.
+- **Next lesson** is recalculated 10 minutes after each lesson starts, and just after it ends.
+- **Other clock-dependent values** such as today, the lunch switch at 15:00 and the week shown from Saturday are
+  recalculated once an hour from stored data. Vklass is not called for this.
+- **Update entity:** `homeassistant.update_entity` on any Vklass entity starts a full refresh now.
 
 ## Keeping the session alive
 
@@ -128,6 +139,8 @@ mode: queued
 ```
 
 ### New news article
+
+See also `examples/automation_news_to_calendar.yaml` for an AI proposal of calendar events from new articles.
 
 Notifies you when a new article appears, and opens the article when you tap the notification. The
 news sensor's state is the number of articles, and its newest article is the first one in `articles`.
