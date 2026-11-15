@@ -9,30 +9,9 @@ It reads information from your parent account and creates sensors per child in H
 
 ## What it provides
 
-Every child on the account gets a device. Entity names use the child's name.
-
-| Entity | Type | Source |
-| --- | --- | --- |
-| Care time / Care tomorrow | sensor | Care schedule. Care time shows today; attribute `week` lists Monday to Friday (the coming week from Saturday on) |
-| Attendance | sensor | Welcome page |
-| Next lesson | sensor | Calendar. Overlapping lessons are joined with ` \| ` |
-| Lunch | sensor | Welcome page. State is today's lunch until 15:00, then tomorrow's. Attribute `days` has every day |
-| Merit value | sensor | Grades page (grade school, see below) |
-| Current grades | sensor | Grades page (grade school, see below) |
-| Active courses / Course attendance | sensor | Study overview (grade school, see below) |
-| Upcoming absences | sensor | Absence page (read only) |
-| Gym today / Gym tomorrow | binary sensor | Calendar (lecture with code IDH, or a title such as Idrott or Gympa; calendar events never count) |
-| Holiday confirmation needed | binary sensor (problem) | Care schedule |
-| Schedule | calendar | Calendar (lessons, events, assignments, plans, vacant days) |
-| Absent now | binary sensor (presence) | Absence page (read only) |
-
-Account level:
-
-| Entity | Type |
-| --- | --- |
-| News (last 3 days) | sensor, with article titles and links as attributes |
-| Unread messages | sensor |
-| Notifications | sensor |
+Per child: care times and a weekly care list, attendance, next lesson, lunch, grades, course judgements,
+upcoming absences, idrott days and a calendar. For the account: news, unread messages and notifications.
+Absences can be reported for today with a button, which is disabled by default.
 
 ## Installation
 
@@ -62,11 +41,6 @@ Either way, the secret is stored in plain text in Home Assistant's configuration
 
 1. Go to **Settings → Devices & services → Add integration** and search for **Vklass**.
 2. Enter the username and password for your Vklass parent account. The login is checked before saving.
-
-School ids are found automatically. If a child has more than one possible school id, open the
-integration's **Configure** dialog and choose the right one. You can also type an id yourself, or
-leave the field empty to keep the automatic choice. Children without a school id get no grades or
-course data.
 
 In the same dialog you can choose which calendar categories appear in the **Schedule** calendar. You can also hide all-day events that span several days, such as whole terms or plans.
 
@@ -110,108 +84,14 @@ time until 23:59 the same day.
 
 ## Suggested notifications
 
-These are examples for automations in Home Assistant. They are not part of the integration, so copy
-them and change them as you like. The entity ids depend on the language Home Assistant used when the
-entities were created. Check them under **Settings → Devices & services → Entities** and replace them
-if yours differ.
+Three example automations are in `examples/`, ready to copy into Home Assistant:
 
-### Unread messages or notifications
+- `notify_unread_messages.yaml`: unread messages or notifications, opens Vklass when tapped.
+- `notify_new_news.yaml`: a new news article, opens the article when tapped.
+- `notify_idrott_tomorrow.yaml`: at 19:00, reminds you which children have idrott tomorrow.
 
-Notifies you when Vklass has unread messages or notifications. Tapping the notification opens Vklass.
-
-```yaml
-alias: Vklass - unread messages
-trigger:
-  - platform: numeric_state
-    entity_id: sensor.vklass_unread_messages
-    above: 0
-  - platform: numeric_state
-    entity_id: sensor.vklass_notifications
-    above: 0
-action:
-  - service: notify.mobile_app_your_phone
-    data:
-      title: "Vklass"
-      message: "You have unread messages or notifications in Vklass."
-      data:
-        clickAction: "https://custodian.vklass.se"
-mode: queued
-```
-
-### New news article
-
-See also `examples/automation_news_to_calendar.yaml` for an AI proposal of calendar events from new articles.
-
-Notifies you when a new article appears, and opens the article when you tap the notification. The
-news sensor's state is the number of articles, and its newest article is the first one in `articles`.
-
-```yaml
-alias: Vklass - new news
-trigger:
-  - platform: state
-    entity_id: sensor.vklass_news_last_3_days
-condition:
-  - condition: template
-    value_template: >-
-      {{ trigger.to_state.state | int(0) > trigger.from_state.state | int(0) }}
-action:
-  - service: notify.mobile_app_your_phone
-    data:
-      title: "New in Vklass"
-      message: "{{ state_attr('sensor.vklass_news_last_3_days', 'articles')[0].title }}"
-      data:
-        clickAction: "{{ state_attr('sensor.vklass_news_last_3_days', 'articles')[0].url }}"
-mode: queued
-```
-
-### Evening reminder: gym clothes for tomorrow
-
-At 19:00, lists every child who has gym tomorrow, and reminds you to pack gym clothes. Nothing is sent
-on evenings when no child has gym.
-
-```yaml
-alias: Vklass - gym clothes tomorrow
-trigger:
-  - platform: time
-    at: "19:00:00"
-variables:
-  children_with_gym: >-
-    {{ states.binary_sensor
-       | selectattr('entity_id', 'search', 'gympa_imorgon|gym_tomorrow')
-       | selectattr('state', 'eq', 'on')
-       | map(attribute='name')
-       | map('replace', ' Gympa imorgon', '')
-       | map('replace', ' Gym tomorrow', '')
-       | list }}
-condition:
-  - condition: template
-    value_template: "{{ children_with_gym | length > 0 }}"
-action:
-  - service: notify.mobile_app_your_phone
-    data:
-      title: "Gym tomorrow"
-      message: >-
-        Pack gym clothes for: {{ children_with_gym | join(', ') }}.
-mode: single
-```
-
-Replace `notify.mobile_app_your_phone` with your own notify service. You can find it under
-**Developer tools → Actions** by searching for `notify.mobile`.
-
-## Known limitations
-
-- **School ids are discovered from Vklass responses.** If Vklass does not return one, the grades and
-  course sensors stay empty for that child until you enter the id yourself.
-- **Absence reporting uses the website form.** If Vklass changes the form, the button stops working and shows an error.
-- **Parsing depends on Vklass markup.** Scraping can break silently after a Vklass update. Check the
-  logs and the diagnostics after an update.
-- **Overlap detection is simple.** Two lessons count as overlapping when their times overlap with the
-  next lesson. Chains of overlaps are not followed.
-- **Scoreboard names are a guess.** The fields `messages` and `notifications` are based on the
-  response keys only. If the counts do not match what you see in Vklass, please report it.
-- **No Swedish or English translation review.** Texts were written by hand and need proofreading.
-- **Only pages that show children on the welcome page are found.** A child that is not referenced
-  on the welcome page at all is not discovered.
+Change the notify service in each file to your own. They are examples, not part of the integration.
+See also `examples/automation_news_to_calendar.yaml` for AI proposals of calendar events.
 
 ## Privacy and security
 
@@ -232,27 +112,6 @@ Open an issue with:
 2. What you expected and what happened.
 3. The relevant log lines (search for `vklass`), with names and ids removed.
 4. The diagnostics file, downloaded from the integration's page.
-
-## Development
-
-Parsers and summary functions can be tested without Home Assistant:
-
-```bash
-pip install requests
-python3 tests/test_parsers.py
-```
-
-The tests use invented data only. Please keep it that way in pull requests: no real names,
-student ids, school ids or calendar links in code, tests, fixtures or documentation.
-
-Layout:
-
-- `custom_components/vklass/api.py` - HTTP client and page parsers (no Home Assistant imports)
-- `custom_components/vklass/summaries.py` - pure summary functions (no Home Assistant imports)
-- `custom_components/vklass/coordinator.py` - polling and data assembly
-- `custom_components/vklass/sensor.py`, `binary_sensor.py`, `entity.py` - entities
-- `custom_components/vklass/config_flow.py` - config and options flow
-- `custom_components/vklass/diagnostics.py` - safe diagnostics
 
 ## Disclaimer
 
