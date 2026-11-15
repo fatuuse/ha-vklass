@@ -8,14 +8,14 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
-from .const import KEEPALIVE_INTERVAL
+from .const import KEEPALIVE_INTERVAL, PRESENCE_INTERVAL, RECOMPUTE_INTERVAL
 from .coordinator import VklassCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.CALENDAR, Platform.BUTTON]
 
 type VklassConfigEntry = ConfigEntry[VklassCoordinator]
-
-_LOGGER = logging.getLogger(__name__)
 
 CONFIG_VERSION = 1
 
@@ -32,9 +32,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: VklassConfigEntry) -> bo
     entry.runtime_data = coordinator
 
     # Keepalive keeps the session (and a rotated cookie) alive between data updates
-    entry.async_on_unload(
-        async_track_time_interval(hass, coordinator.async_keepalive, KEEPALIVE_INTERVAL)
-    )
+    entry.async_on_unload(async_track_time_interval(hass, coordinator.async_keepalive, KEEPALIVE_INTERVAL))
+    # Attendance and care times during school start
+    entry.async_on_unload(async_track_time_interval(hass, coordinator.async_presence_refresh, PRESENCE_INTERVAL))
+    # Clock-dependent values, without network calls
+    entry.async_on_unload(async_track_time_interval(hass, coordinator.async_recompute, RECOMPUTE_INTERVAL))
+    entry.async_on_unload(coordinator.cancel_boundary)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

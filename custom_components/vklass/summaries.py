@@ -4,10 +4,19 @@ No Home Assistant imports here, so these functions can be tested without Home As
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from .const import GYM_CATEGORY, GYM_KEYWORD, LESSON_CATEGORIES, SESSION_SEPARATOR
+from .const import (
+    IDROTT_CATEGORY,
+    IDROTT_CODE,
+    LESSON_CATEGORIES,
+    LESSON_START_RECALC_DELAY,
+    PRESENCE_END,
+    PRESENCE_START,
+    SESSION_SEPARATOR,
+)
 
 
 def _span(event: dict[str, Any]) -> tuple[datetime, datetime]:
@@ -28,7 +37,9 @@ def _lesson_block(lessons: list[dict[str, Any]], now: datetime) -> dict[str, Any
         key=lambda item: item[1],
     )
     return {
-        "title": SESSION_SEPARATOR.join(str(e.get("title") or e.get("code") or "") for e, _, _ in group),
+        "title": SESSION_SEPARATOR.join(
+            f"{begins:%H:%M} {e.get('title') or e.get('code') or ''}".strip() for e, begins, _ in group
+        ),
         "start": first_start.isoformat(),
         "end": first_end.isoformat(),
         "location": first.get("location"),
@@ -41,27 +52,27 @@ def _lesson_block(lessons: list[dict[str, Any]], now: datetime) -> dict[str, Any
 
 
 def summarize_calendar(events: list[dict[str, Any]], now: datetime) -> dict[str, Any]:
-    """Gym today/tomorrow (gym lessons only) and the next lesson block.
+    """Idrott today/tomorrow (idrott lessons only) and the next lesson block.
 
     Lessons are categories in LESSON_CATEGORIES, which includes calendar events (type 4).
-    Gym is a lecture with the gym code, so a type 4 event never counts as gym.
+    Idrott is a lecture with the idrott code, so a type 4 event never counts as idrott.
     """
     today = now.date()
     tomorrow = today + timedelta(days=1)
     lessons = [e for e in events if e.get("category") in LESSON_CATEGORIES and not e.get("cancelled")]
 
-    gym_today = False
-    gym_tomorrow = False
+    idrott_today = False
+    idrott_tomorrow = False
     for event in events:
-        if event.get("category") != GYM_CATEGORY or event.get("cancelled"):
+        if event.get("category") != IDROTT_CATEGORY or event.get("cancelled"):
             continue
-        if (event.get("code") or "").lower() != GYM_KEYWORD:
+        if not is_idrott(event):
             continue
         day = _span(event)[0].date()
-        gym_today = gym_today or day == today
-        gym_tomorrow = gym_tomorrow or day == tomorrow
+        idrott_today = idrott_today or day == today
+        idrott_tomorrow = idrott_tomorrow or day == tomorrow
 
-    return {"gym_today": gym_today, "gym_tomorrow": gym_tomorrow, "next_event": _lesson_block(lessons, now)}
+    return {"idrott_today": idrott_today, "idrott_tomorrow": idrott_tomorrow, "next_event": _lesson_block(lessons, now)}
 
 
 def _care_state(entry: dict[str, Any] | None) -> dict[str, Any]:
@@ -89,9 +100,18 @@ def _care_state(entry: dict[str, Any] | None) -> dict[str, Any]:
 WEEKDAY_NAMES = ["måndag", "tisdag", "onsdag", "torsdag", "fredag"]
 
 
+WEEKEND_START = 5  # Saturday
+
+
 def current_week(schedule: dict[str, dict[str, Any]], today: date) -> list[dict[str, Any]]:
-    """Monday to Friday of the current week, with the care times for each day."""
+    """Monday to Friday of the week shown.
+
+    The school week ends on Friday. From Saturday on, the week shown is the coming one,
+    so the family can prepare for it.
+    """
     monday = today - timedelta(days=today.weekday())
+    if today.weekday() >= WEEKEND_START:
+        monday += timedelta(days=7)
     week = []
     for offset, weekday in enumerate(WEEKDAY_NAMES):
         day = monday + timedelta(days=offset)
@@ -188,7 +208,6 @@ def _has_care(child: dict[str, Any]) -> bool:
 
 # Entities that only make sense for some children. Everything else is enabled.
 ENTITY_RELEVANCE = {
-    "care_today": _has_care,
     "care_tomorrow": _has_care,
     "care_time": _has_care,
     "attendance": _has_care,
@@ -246,3 +265,60 @@ def summarize_menu(food: dict[str, list[str]], now: datetime) -> dict[str, Any]:
         "menu_date": shown["date"] if shown else None,
         "menu_days": days,
     }
+
+
+def is_presence_window(now: datetime) -> bool:
+    """True on weekdays between PRESENCE_START and PRESENCE_END, when attendance is refreshed often."""
+    return now.weekday() < 5 and PRESENCE_START <= now.time() < PRESENCE_END
+
+
+def next_lesson_boundary(children: dict[str, dict[str, Any]], now: datetime) -> datetime | None:
+    """The next moment to recalculate: 10 minutes after a lesson starts, or just after it ends.
+
+    Across all children. None if there is no such moment left in the calendar window.
+    """
+    moments = []
+    for child in children.values():
+        for event in child.get("calendar_events") or []:
+            if event.get("category") not in LESSON_CATEGORIES or event.get("cancelled"):
+                continue
+            start, end = _span(event)
+            for trigger in (start + LESSON_START_RECALC_DELAY, end + timedelta(seconds=1)):
+                if trigger > now:
+                    moments.append(trigger)
+    return min(moments, default=None)
+
+
+NEWS_ARTICLE_LIMIT = 10
+NEWS_INTRO_LIMIT = 200
+NEWS_LATEST_TEXT_LIMIT = 4000
+
+
+def news_attributes(news: list[dict[str, Any]]) -> dict[str, Any]:
+    """Attributes for the news sensor.
+
+    `articles` lists the 10 newest articles with a short intro and no body text. `latest_text` is the body
+    of the newest article, capped, so an automation can read it and propose calendar events.
+    """
+    newest_first = sorted(news, key=lambda a: a.get("publish_date") or "", reverse=True)
+    articles = []
+    for article in newest_first[:NEWS_ARTICLE_LIMIT]:
+        entry = {k: v for k, v in article.items() if k != "text"}
+        intro = entry.get("intro") or ""
+        if len(intro) > NEWS_INTRO_LIMIT:
+            entry["intro"] = intro[:NEWS_INTRO_LIMIT] + "\u2026"
+        articles.append(entry)
+    latest_text = (newest_first[0].get("text") or "") if newest_first else ""
+    if len(latest_text) > NEWS_LATEST_TEXT_LIMIT:
+        latest_text = latest_text[:NEWS_LATEST_TEXT_LIMIT] + "\u2026"
+    return {"count": len(news), "articles": articles, "latest_text": latest_text}
+
+
+IDROTT_PATTERN = re.compile(r"\bidh\b|idrott|gympa|\bidr\b")
+
+
+def is_idrott(event: dict[str, Any]) -> bool:
+    """An idrott lesson: code IDH, or a title that says idrott, gympa or idr. Vklass uses short codes like IDH."""
+    text = f"{event.get('title') or ''} {event.get('code') or ''}".lower()
+    return bool(IDROTT_PATTERN.search(text))
+

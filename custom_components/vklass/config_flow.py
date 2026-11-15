@@ -26,7 +26,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .api import VklassAuthError, VklassClient, VklassConnectionError
+from .api import VklassAuthError, VklassClient, VklassConnectionError, VklassNoChildrenError
 from .const import (
     AUTH_COOKIE,
     AUTH_PASSWORD,
@@ -188,6 +188,8 @@ class VklassConfigFlow(ConfigFlow, domain=DOMAIN):
                 children = await self.hass.async_add_executor_job(_children_for_password, username, password)
             except VklassAuthError:
                 errors["base"] = "invalid_auth"
+            except VklassNoChildrenError:
+                errors["base"] = "no_children"
             except VklassConnectionError:
                 errors["base"] = "cannot_connect"
             else:
@@ -206,6 +208,8 @@ class VklassConfigFlow(ConfigFlow, domain=DOMAIN):
                 children = await self.hass.async_add_executor_job(_children_for_cookie, cookie)
             except VklassAuthError:
                 errors["base"] = "invalid_cookie"
+            except VklassNoChildrenError:
+                errors["base"] = "no_children"
             except VklassConnectionError:
                 errors["base"] = "cannot_connect"
             else:

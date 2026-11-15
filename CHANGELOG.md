@@ -1,3 +1,86 @@
+## Unreleased
+
+- School ids are read from the school selector on the student's study overview page. The selected school is
+  used automatically. If several schools are listed, you choose under Configure.
+- The grade and course sensors are always created. They show unknown until a school id is known.
+- Gym was renamed to idrott (entities `idrott_today` and `idrott_tomorrow`). Existing gym entities keep their old ids.
+- Next lesson shows the start time (hh:mm) in front of each lesson.
+
+## 0.2.11
+
+- Renamed gym to idrott everywhere the integration names it: the entities `idrott_today` and `idrott_tomorrow`
+  (names "Idrott idag / imorgon" in Swedish, "Idrott today / tomorrow" in English), and the code and docs.
+  Gympa and idr are still recognised in lesson titles, since that is what Vklass writes.
+- Entity ids are created when an entity is first added. Existing gym entities keep their old ids. Rename them in
+  Home Assistant if you want the new ids, or delete the old entities.
+
+## 0.2.10
+
+- A welcome page without children is an error (`VklassNoChildrenError`), not an empty list. Before, an empty list
+  could make every child's entities be removed. The config flow shows "no children" for it.
+- Gym lessons are also recognised by title (idrott, gympa, idr), not only by the code IDH.
+- Event type 8 (day off) is a vacant day.
+- A child without a calendar link is found by a student id on its card, for children without lessons.
+- If the news data is missing on the news page, the articles are read from the welcome page.
+- News attachments (PDF and similar) are listed per article, with absolute links, at most five per article.
+
+## 0.2.9
+
+- The news sensor has an attribute `latest_text` with the body of the newest article (capped at 4000 characters).
+  The body is in the news feed already, so no extra request is made. The article list still has no body text.
+- Example automation in `examples/automation_news_to_calendar.yaml`. It asks an AI Task to propose an event from a
+  new article, and creates it in a local calendar only after you tap Create.
+
+## 0.2.8
+
+- The recalculation after a lesson starts runs 10 minutes after the start, not right at the start.
+  The recalculation after a lesson ends still runs just after the end.
+
+## 0.2.7
+
+- The next lesson sensor changes right after each lesson starts or ends, instead of waiting for the hourly
+  recalculation. The integration wakes up at the next lesson boundary. No calls to Vklass are made.
+
+## 0.2.6
+
+- Clock-dependent values are recalculated once an hour (was every 5 minutes). Still no calls to Vklass.
+
+## 0.2.5
+
+- Full refresh every 8 hours (was 30 minutes). Vklass is called much less often.
+- During school start, on weekdays 07:00 to 09:30, attendance and care times refresh every 15 minutes. Only the
+  welcome page and the care schedule are read then.
+- Keepalive is unchanged, every 10 minutes, and keeps the session alive.
+- Values that depend on the clock (today, the lunch switch at 15:00, the week shown from Saturday, the next lesson)
+  are recalculated every 5 minutes from stored data, without calling Vklass.
+- `homeassistant.update_entity` on any Vklass entity starts a full refresh.
+
+## 0.2.4
+
+- On Saturdays and Sundays the `week` attribute of `Omsorgstid` shows the coming week (Monday to Friday), so the
+  family can prepare for it. The school week ends on Friday.
+
+## 0.2.3
+
+- Removed the sensor `Omsorgstid idag`. The `Omsorgstid` sensor shows today's care times.
+- On Saturdays the `week` attribute of `Omsorgstid` shows the coming week (Monday to Friday) instead of the current one.
+
+## 0.2.2
+
+- Fixed: school id discovery asked the courses page without a school id. Vklass answers that with HTTP 403,
+  which was treated as an expired session. The integration then signed in again, and that sign-in was rejected.
+  Discovery now makes a single request and never signs in again. If Vklass refuses it, no school id is set and
+  it can be entered under Configure.
+
+## 0.2.1
+
+- Fixed: after a successful sign-in with username and password, the redirect is now followed, as a browser does.
+  Before, the site session could be incomplete, the next request was redirected to sign-in again, and a second
+  sign-in was started right away. That second sign-in cleared the working session and was rejected, which made
+  Home Assistant ask for re-authentication.
+- A sign-in is not repeated within 30 seconds of a successful one. The failure is reported as a connection error
+  and the debug log says why.
+
 ## 0.2.0
 
 First release on the new version line. It contains all changes from the 0.1.0 alpha series:

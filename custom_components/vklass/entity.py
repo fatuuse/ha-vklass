@@ -46,6 +46,10 @@ class VklassChildEntity(CoordinatorEntity[VklassCoordinator]):
         )
         self._attr_entity_registry_enabled_default = entity_enabled_by_default(child, key)
 
+    async def async_update(self) -> None:
+        """Called by homeassistant.update_entity. Refreshes all Vklass data."""
+        await self.coordinator.async_request_refresh()
+
     @property
     def child(self) -> dict[str, Any]:
         return self.coordinator.data["children"].get(self._child_key, {})

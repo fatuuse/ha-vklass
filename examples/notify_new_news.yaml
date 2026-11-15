@@ -1,0 +1,18 @@
+# Notifies when a new Vklass news article appears, and opens the article when tapped.
+# Replace notify.mobile_app_your_phone with your notification service.
+alias: Vklass - new news
+trigger:
+  - platform: state
+    entity_id: sensor.vklass_news_last_3_days
+condition:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state.state | int(0) > trigger.from_state.state | int(0) }}
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "New in Vklass"
+      message: "{{ state_attr('sensor.vklass_news_last_3_days', 'articles')[0].title }}"
+      data:
+        clickAction: "{{ state_attr('sensor.vklass_news_last_3_days', 'articles')[0].url }}"
+mode: queued
