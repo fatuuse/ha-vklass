@@ -20,6 +20,7 @@ from . import VklassConfigEntry
 from .const import DOMAIN
 from .coordinator import VklassCoordinator
 from .entity import VklassChildEntity, async_track_child_removal
+from .summaries import news_attributes
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,16 +49,6 @@ CHILD_SENSORS: tuple[VklassChildSensorDescription, ...] = (
         icon="mdi:calendar-clock",
         value_fn=lambda c: (c.get("next_event") or {}).get("title"),
         attrs_fn=lambda c: dict(c.get("next_event") or {}),
-    ),
-    VklassChildSensorDescription(
-        key="care_today",
-        translation_key="care_today",
-        icon="mdi:calendar-account",
-        value_fn=lambda c: (c.get("care_today") or {}).get("state"),
-        attrs_fn=lambda c: {
-            **{k: v for k, v in (c.get("care_today") or {}).items() if k != "state"},
-            "schedule": c.get("care_schedule") or [],
-        },
     ),
     VklassChildSensorDescription(
         key="care_tomorrow",
@@ -164,25 +155,17 @@ class VklassNewsSensor(CoordinatorEntity[VklassCoordinator], SensorEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
+    async def async_update(self) -> None:
+        """Called by homeassistant.update_entity. Refreshes all Vklass data."""
+        await self.coordinator.async_request_refresh()
+
     @property
     def native_value(self) -> int:
         return len(self.coordinator.data.get("news") or [])
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        articles = sorted(
-            self.coordinator.data.get("news") or [],
-            key=lambda a: a.get("publish_date") or "",
-            reverse=True,
-        )[:10]
-        capped = []
-        for article in articles:
-            entry = dict(article)
-            intro = entry.get("intro") or ""
-            if len(intro) > 200:
-                entry["intro"] = intro[:200] + "\u2026"
-            capped.append(entry)
-        return {"count": len(capped), "articles": capped}
+        return news_attributes(self.coordinator.data.get("news") or [])
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -230,6 +213,10 @@ class VklassServiceSensor(CoordinatorEntity[VklassCoordinator], SensorEntity):
             entry_type=DeviceEntryType.SERVICE,
         )
 
+    async def async_update(self) -> None:
+        """Called by homeassistant.update_entity. Refreshes all Vklass data."""
+        await self.coordinator.async_request_refresh()
+
     @property
     def native_value(self) -> Any:
         return self.entity_description.value_fn(self.coordinator.data)
@@ -245,9 +232,8 @@ async def async_setup_entry(
     entities.extend(VklassServiceSensor(coordinator, entry, d) for d in SERVICE_SENSORS)
     entities_by_child: dict[str, list] = {}
     for child_name, child in coordinator.data["children"].items():
-        descriptions = CHILD_SENSORS
-        if child.get("school_id") is not None:
-            descriptions = (*CHILD_SENSORS, *GRADE_SENSORS, *COURSE_SENSORS)
+        # Grades and course judgements are always created. Their values stay unknown until a school id is known.
+        descriptions = (*CHILD_SENSORS, *GRADE_SENSORS, *COURSE_SENSORS)
         child_entities = list(
             VklassChildSensor(coordinator, entry, child_name, description)
             for description in descriptions

@@ -66,6 +66,10 @@ class VklassConnectionError(Exception):
     """Vklass could not be reached or returned unexpected data."""
 
 
+class VklassNoChildrenError(VklassConnectionError):
+    """The welcome page was read, but no children were found on it. The page may have changed."""
+
+
 def _parse_food(block: str) -> dict[str, list[str]]:
     """Return {day header: [menu items]} for one child card."""
     menu: dict[str, list[str]] = {}
@@ -226,9 +230,12 @@ class VklassClient:
         """
         page = self._request("GET", HOME_URL).text
         try:
-            return self._parse_children(page)
+            children = self._parse_children(page)
         except (ValueError, IndexError, AttributeError) as err:
             raise VklassConnectionError("Could not parse the Vklass welcome page") from err
+        if not children:
+            raise VklassNoChildrenError("No children found on the Vklass welcome page. The page may have changed.")
+        return children
 
     def _parse_children(self, page: str) -> dict[str, dict[str, Any]]:
         children: dict[str, dict[str, Any]] = {}
@@ -236,7 +243,7 @@ class VklassClient:
         for block in CHILD_CARD_RE.findall(page):
             block = block.replace("\r\n", "").replace("\t", "")
             names = NAME_RE.findall(block)
-            ids = ID_RE.findall(block)
+            ids = ID_RE.findall(block) or DATA_STUDENT_RE.findall(block)
             student_id = int(ids[0]) if ids and ids[0].isdigit() else None
             if not names or student_id is None:
                 _LOGGER.debug("Skipping a welcome card without name or student id")
@@ -271,39 +278,29 @@ class VklassClient:
     # end of _parse_children – the VklassConnectionError catch is in get_children
 
     def get_news(self) -> list[dict[str, Any]]:
-        """Return news articles published within the last NEWS_DAYS days."""
-        page = self._request("GET", NEWS_URL).text
-        match = NEWS_RE.search(page)
-        if match is None:
-            _LOGGER.warning("Could not find news data on Vklass news page")
-            return []
+        """Return news articles published within the last NEWS_DAYS days.
 
-        try:
-            data = json.loads(match.group(1))
-        except ValueError:
-            _LOGGER.warning("Could not decode news JSON from Vklass")
-            return []
+        The news page carries the articles as data. If that data is missing, the welcome page carries
+        the same articles, one per block, and they are used instead.
+        """
+        page = self._request("GET", NEWS_URL).text
+        articles = _articles_from_news_page(page)
+        if articles is None:
+            articles = _articles_from_welcome(self._request("GET", HOME_URL).text)
+            if articles is None:
+                _LOGGER.warning("Could not find news data on the Vklass news page or the welcome page")
+                return []
 
         cutoff = (datetime.today() - timedelta(days=NEWS_DAYS)).date()
         news: list[dict[str, Any]] = []
-        for article in data.get("newsArticles", []):
+        for article in articles:
             try:
                 published = datetime.strptime(article["publishDate"], "%Y-%m-%d").date()
             except (KeyError, TypeError, ValueError):
                 continue
             if published <= cutoff:
                 continue
-            news.append({
-                "id": article.get("id"),
-                "url": f"{BASE_URL}/Home/News/{article['id']}" if article.get("id") else None,
-                "title": article.get("title"),
-                "publish_date": article.get("publishDate"),
-                "author": article.get("authorName"),
-                "intro": article.get("introText"),
-                "tags": article.get("tags"),
-                "files": len(article.get("files") or []),
-                "children": [c.get("name") for c in article.get("children") or []],
-            })
+            news.append(_news_entry(article))
         _LOGGER.debug("News: %d articles in the last %d days", len(news), NEWS_DAYS)
         return news
 
@@ -393,23 +390,33 @@ class VklassClient:
         return parsed
 
     def discover_school_ids(self, student_id: int) -> list[int]:
-        """Return the school id(s) the student's courses belong to. Empty if none can be read.
+        """Return the school ids of the student, the selected school first. Empty if none can be read.
 
-        This is a best-effort lookup. It never signs in again: a 403 here means Vklass refuses
-        the request without a school id, not that the session has expired.
+        The study overview page for the student has a school selector whose option values are the school ids.
+        This is a best-effort lookup. It never signs in again.
         """
         try:
-            page = self._request(
-                "GET",
-                f"{BASE_URL}/StudyOverview/Courses/{student_id}",
-                params={"X-Requested-With": "XMLHttpRequest"},
-                retry=False,
-            ).text
-            school_id = parse_courses(page).get("school_id")
+            page = self._request("GET", f"{BASE_URL}/StudyOverview/Student/{student_id}", retry=False).text
         except (VklassConnectionError, VklassAuthError) as err:
             _LOGGER.debug("School id discovery found nothing (%s), no sign-in is repeated", type(err).__name__)
             return []
-        return [int(school_id)] if school_id else []
+        ids = parse_school_ids(page)
+        _LOGGER.debug("School id discovery: %d school(s) found", len(ids))
+        return ids
+
+    def _sync_cookie(self) -> None:
+        """Pick up a rotated session cookie from the response and tell the owner about it."""
+        if self._cookie is None:
+            return
+        values = [c.value for c in self._session.cookies if c.name == COOKIE_NAME]
+        if values and values[-1] != self._cookie:
+            self._cookie = values[-1]
+            if self._on_cookie_update is not None:
+                self._on_cookie_update(self._cookie)
+
+    def ping(self) -> None:
+        """Keep the session alive. Uses the scoreboard, which the Vklass start page polls too."""
+        self.get_scoreboard()
 
     def report_absence_today(self, student_id: int, now: datetime) -> str:
         """Report an absence for one child from now until the end of the day.
@@ -457,20 +464,6 @@ class VklassClient:
         if not _covers(confirmed, student_id, now):
             raise VklassConnectionError("Vklass did not confirm the absence report")
         return "reported"
-
-    def _sync_cookie(self) -> None:
-        """Pick up a rotated session cookie from the response and tell the owner about it."""
-        if self._cookie is None:
-            return
-        values = [c.value for c in self._session.cookies if c.name == COOKIE_NAME]
-        if values and values[-1] != self._cookie:
-            self._cookie = values[-1]
-            if self._on_cookie_update is not None:
-                self._on_cookie_update(self._cookie)
-
-    def ping(self) -> None:
-        """Keep the session alive. Uses the scoreboard, which the Vklass start page polls too."""
-        self.get_scoreboard()
 
     def get_absences(self) -> dict[int, list[dict[str, Any]]]:
         """Return current and upcoming absence reports per student id (read-only)."""
@@ -714,3 +707,77 @@ def client_for_data(
     if data.get(CONF_AUTH_METHOD) == AUTH_COOKIE:
         return VklassClient(cookie=data[DATA_COOKIE], on_cookie_update=on_cookie_update)
     return VklassClient(data[DATA_USERNAME], data[DATA_PASSWORD])
+
+
+DATA_STUDENT_RE = re.compile(r'[\w-]*student[\w-]*="(\d+)"', re.I)
+NEWS_WELCOME_RE = re.compile(r'article\.bind="(\{&quot;id&quot;.*?\})"')
+
+
+def _articles_from_news_page(page: str) -> list[dict[str, Any]] | None:
+    """The articles in the news page's data, or None if the data is missing."""
+    match = NEWS_RE.search(page)
+    if match is None:
+        return None
+    try:
+        data = json.loads(match.group(1))
+    except ValueError:
+        return None
+    articles = data.get("newsArticles")
+    return articles if isinstance(articles, list) else None
+
+
+def _articles_from_welcome(page: str) -> list[dict[str, Any]] | None:
+    """The same articles, as the welcome page carries them (one escaped JSON block each)."""
+    found: list[dict[str, Any]] = []
+    for raw in NEWS_WELCOME_RE.findall(page):
+        try:
+            found.append(json.loads(html.unescape(raw)))
+        except ValueError:
+            continue
+    return found or None
+
+
+def _news_entry(article: dict[str, Any]) -> dict[str, Any]:
+    files = []
+    for f in article.get("files") or []:
+        url = f.get("url")
+        if url:
+            files.append({
+                "name": f.get("nameWithExtension") or f.get("name") or "Attachment",
+                "url": urljoin(BASE_URL + "/", url),
+            })
+    return {
+        "id": article.get("id"),
+        "url": f"{BASE_URL}/Home/News/{article['id']}" if article.get("id") else None,
+        "title": article.get("title"),
+        "publish_date": article.get("publishDate"),
+        "author": article.get("authorName"),
+        "intro": article.get("introText"),
+        "text": html.unescape(TAG_RE.sub("", article.get("text") or "")).replace("\r\n", "\n").strip(),
+        "tags": article.get("tags"),
+        "files": files[:5],
+        "children": [c.get("name") for c in article.get("children") or []],
+    }
+
+
+STUDY_SCHOOL_SELECT_RE = re.compile(r'<select id="SchoolId".*?</select>', re.S)
+STUDY_OPTION_RE = re.compile(r"<option([^>]*)>")
+
+
+def parse_school_ids(page: str) -> list[int]:
+    """School ids from the school selector on the study overview page, the selected school first."""
+    select = STUDY_SCHOOL_SELECT_RE.search(page)
+    if select is None:
+        return []
+    selected: list[int] = []
+    others: list[int] = []
+    for attrs in STUDY_OPTION_RE.findall(select.group(0)):
+        value = re.search(r'value="(\d+)"', attrs)
+        if value is None:
+            continue
+        school_id = int(value.group(1))
+        target = selected if re.search(r"\bselected\b", attrs) else others
+        if school_id not in selected and school_id not in others:
+            target.append(school_id)
+    return selected + [i for i in others if i not in selected]
+

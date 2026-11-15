@@ -26,16 +26,16 @@ class VklassChildBinarySensorDescription(BinarySensorEntityDescription):
 
 CHILD_BINARY_SENSORS: tuple[VklassChildBinarySensorDescription, ...] = (
     VklassChildBinarySensorDescription(
-        key="gym_today",
-        translation_key="gym_today",
+        key="idrott_today",
+        translation_key="idrott_today",
         icon="mdi:run",
-        value_fn=lambda c: bool(c.get("gym_today")),
+        value_fn=lambda c: bool(c.get("idrott_today")),
     ),
     VklassChildBinarySensorDescription(
-        key="gym_tomorrow",
-        translation_key="gym_tomorrow",
+        key="idrott_tomorrow",
+        translation_key="idrott_tomorrow",
         icon="mdi:run",
-        value_fn=lambda c: bool(c.get("gym_tomorrow")),
+        value_fn=lambda c: bool(c.get("idrott_tomorrow")),
     ),
     VklassChildBinarySensorDescription(
         key="holiday_confirmation",

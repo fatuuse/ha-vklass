@@ -1,5 +1,5 @@
 """Constants for the Vklass integration."""
-from datetime import timedelta
+from datetime import time, timedelta
 
 DOMAIN = "vklass"
 
@@ -13,10 +13,17 @@ CARE_URL = f"{BASE_URL}/CareSchedule/Overview/"
 SCOREBOARD_URL = f"{BASE_URL}/Account/Scoreboard"
 ABSENCE_URL = f"{BASE_URL}/Absence/Notify/"
 
-UPDATE_INTERVAL = timedelta(minutes=30)
+# Full refresh. Vklass is called only this often, plus the presence refresh below.
+UPDATE_INTERVAL = timedelta(hours=8)
+# Presence (attendance and care times) during school start, on weekdays only
+PRESENCE_INTERVAL = timedelta(minutes=15)
+PRESENCE_START = time(7, 0)
+PRESENCE_END = time(9, 30)
+# Recompute time-dependent values from stored data. No network calls.
+RECOMPUTE_INTERVAL = timedelta(hours=1)
 CALENDAR_DAYS = 7
 REQUEST_TIMEOUT = 20
-GYM_KEYWORD = "idh"
+IDROTT_CODE = "idh"
 LESSON_EVENT_TYPE = 1
 NEWS_DAYS = 3
 
@@ -31,12 +38,12 @@ CATEGORY_BY_CLASS = {
     "vk-cl-event-plan": "plan",
     "vk-cl-event-vacantday": "vacantday",
 }
-CATEGORY_BY_EVENT_TYPE = {1: "lecture", 2: "assignment", 4: "event", 16: "plan"}
+CATEGORY_BY_EVENT_TYPE = {1: "lecture", 2: "assignment", 4: "event", 8: "vacantday", 16: "plan"}
 CALENDAR_CATEGORIES = ("lecture", "event", "assignment", "plan", "vacantday", "other")
 
-# Event type 4 (calendar event) is treated as a lesson, but never as gym.
+# Event type 4 (calendar event) is treated as a lesson, but never as idrott.
 LESSON_CATEGORIES = ("lecture", "event")
-GYM_CATEGORY = "lecture"
+IDROTT_CATEGORY = "lecture"
 SESSION_SEPARATOR = " | "
 
 OPTION_CALENDAR_CATEGORIES = "calendar_categories"
@@ -65,3 +72,6 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0 Safari/537.36"
 )
+
+# Recalculate this long after a lesson starts (lets arrivals show up before the sensor updates)
+LESSON_START_RECALC_DELAY = timedelta(minutes=10)
