@@ -1,1 +1,18 @@
-h
+# Notifies when Vklass has unread messages or notifications. Tapping the notification opens Vklass.
+# Replace notify.mobile_app_your_phone with your notification service.
+alias: Vklass - unread messages
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.vklass_unread_messages
+    above: 0
+  - platform: numeric_state
+    entity_id: sensor.vklass_notifications
+    above: 0
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "Vklass"
+      message: "You have unread messages or notifications in Vklass."
+      data:
+        clickAction: "https://custodian.vklass.se"
+mode: queued

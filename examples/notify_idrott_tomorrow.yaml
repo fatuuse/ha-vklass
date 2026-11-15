@@ -1,0 +1,27 @@
+# At 19:00, lists the children who have idrott tomorrow and reminds you to pack idrott clothes.
+# Nothing is sent on evenings when no child has idrott.
+# Replace notify.mobile_app_your_phone with your notification service.
+# Check the entity ids under Settings -> Devices & services -> Entities if your names differ.
+alias: Vklass - idrott clothes tomorrow
+trigger:
+  - platform: time
+    at: "19:00:00"
+variables:
+  children_with_gym: >-
+    {{ states.binary_sensor
+       | selectattr('entity_id', 'search', 'idrott_imorgon|idrott_tomorrow')
+       | selectattr('state', 'eq', 'on')
+       | map(attribute='name')
+       | map('replace', ' Idrott imorgon', '')
+       | map('replace', ' Idrott tomorrow', '')
+       | list }}
+condition:
+  - condition: template
+    value_template: "{{ children_with_gym | length > 0 }}"
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      title: "Idrott tomorrow"
+      message: >-
+        Pack clothes for idrott: {{ children_with_gym | join(', ') }}.
+mode: single
