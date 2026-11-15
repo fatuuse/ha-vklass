@@ -83,9 +83,6 @@
   },
   "entity": {
     "sensor": {
-      "care_today": {
-        "name": "Omsorgstid idag"
-      },
       "care_tomorrow": {
         "name": "Omsorgstid imorgon"
       },
@@ -127,11 +124,11 @@
       }
     },
     "binary_sensor": {
-      "gym_today": {
-        "name": "Gympa idag"
+      "idrott_today": {
+        "name": "Idrott idag"
       },
-      "gym_tomorrow": {
-        "name": "Gympa imorgon"
+      "idrott_tomorrow": {
+        "name": "Idrott imorgon"
       },
       "holiday_confirmation": {
         "name": "Lov behöver bekräftas"

@@ -83,9 +83,6 @@
   },
   "entity": {
     "sensor": {
-      "care_today": {
-        "name": "Care today"
-      },
       "care_tomorrow": {
         "name": "Care tomorrow"
       },
@@ -127,11 +124,11 @@
       }
     },
     "binary_sensor": {
-      "gym_today": {
-        "name": "Gym today"
+      "idrott_today": {
+        "name": "Idrott today"
       },
-      "gym_tomorrow": {
-        "name": "Gym tomorrow"
+      "idrott_tomorrow": {
+        "name": "Idrott tomorrow"
       },
       "holiday_confirmation": {
         "name": "Holiday confirmation needed"
