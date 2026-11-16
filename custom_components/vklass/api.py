@@ -9,7 +9,7 @@ import threading
 import time
 from urllib.parse import urljoin
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import requests
@@ -365,6 +365,62 @@ class VklassClient:
         _LOGGER.debug("Care schedule: %d children with schedule data", len(children))
         return children
 
+    def set_care_day(
+        self,
+        student_id: int,
+        school_id: int,
+        day: date,
+        start: str,
+        end: str,
+        on_leave: bool,
+        message: str,
+    ) -> None:
+        """Save one day on the care schedule, the same way the care schedule page does. Raises on failure."""
+        self.ensure_login()
+        page = self._request("GET", f"{BASE_URL}/CareSchedule/Overview/").text
+        token = TOKEN_RE.search(page)
+        if token is None:
+            raise VklassConnectionError("Care schedule form token not found")
+        response = self._request(
+            "POST",
+            f"{BASE_URL}/CareSchedule/SaveChanges",
+            data={
+                "Changes[0].DeviationScheduleDayId": "",
+                "Changes[0].Date": day.isoformat(),
+                "Changes[0].StudentId": str(student_id),
+                "Changes[0].SchoolId": str(school_id),
+                "Changes[0].IsOnLeave": "true" if on_leave else "false",
+                "Changes[0].StartTime": start,
+                "Changes[0].EndTime": end,
+                "Changes[0].Message": message,
+                "__RequestVerificationToken": token.group(1),
+            },
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        try:
+            alert = response.json().get("alert", {})
+        except (ValueError, AttributeError) as err:
+            raise VklassConnectionError("Vklass did not confirm the change") from err
+        if alert.get("contextCssClass") != "success":
+            raise VklassConnectionError(alert.get("message") or "Vklass did not save the change")
+        _LOGGER.debug("Care day saved for one child")
+
+    def get_care_days(self, from_date: date) -> dict[int, dict[str, dict[str, Any]]]:
+        """Care schedule for the weeks from a Monday, as the overview page loads them when you ask for more weeks."""
+        response = self._request(
+            "GET",
+            CARE_LOAD_URL,
+            params={"fromDate": from_date.isoformat()},
+            headers={"Accept": "application/json"},
+        )
+        try:
+            model = response.json()
+        except ValueError as err:
+            raise VklassConnectionError("Care days response was not JSON") from err
+        if not isinstance(model, dict):
+            raise VklassConnectionError("Unexpected care days format")
+        return parse_care_days(model)
+
     def get_grades(self, student_id: int, school_id: int) -> dict[str, Any]:
         """Return grades per subject and term, plus merit values, for one student."""
         page = self._request(
@@ -504,7 +560,7 @@ def parse_care_schedule(page: str) -> dict[int, dict[str, Any]]:
     if match is None:
         raise VklassConnectionError("Care schedule data not found on overview page")
     try:
-        model = json.loads(match.group(1))
+        model = json.loads(match.group(1).replace("\\'", "'"))
     except ValueError as err:
         raise VklassConnectionError("Could not decode care schedule data") from err
 
@@ -560,7 +616,7 @@ def parse_grades(page: str) -> dict[str, Any]:
     if match is None:
         raise VklassConnectionError("Grades data not found")
     try:
-        model = json.loads(match.group(1))
+        model = json.loads(match.group(1).replace("\\'", "'"))
     except ValueError as err:
         raise VklassConnectionError("Could not decode grades data") from err
 
@@ -614,7 +670,7 @@ def parse_courses(page: str) -> dict[str, Any]:
     if match is None:
         raise VklassConnectionError("Courses data not found")
     try:
-        model = json.loads(match.group(1))
+        model = json.loads(match.group(1).replace("\\'", "'"))
     except ValueError as err:
         raise VklassConnectionError("Could not decode courses data") from err
 
@@ -719,7 +775,7 @@ def _articles_from_news_page(page: str) -> list[dict[str, Any]] | None:
     if match is None:
         return None
     try:
-        data = json.loads(match.group(1))
+        data = json.loads(match.group(1).replace("\\'", "'"))
     except ValueError:
         return None
     articles = data.get("newsArticles")
@@ -780,4 +836,26 @@ def parse_school_ids(page: str) -> list[int]:
         if school_id not in selected and school_id not in others:
             target.append(school_id)
     return selected + [i for i in others if i not in selected]
+
+
+CARE_LOAD_URL = f"{BASE_URL}/CareSchedule/LoadDays"
+
+
+def parse_care_days(model: dict[str, Any]) -> dict[int, dict[str, dict[str, Any]]]:
+    """Schedule days per student id. Only the fields the integration uses are kept."""
+    closed_by_school = {int(k): set(v) for k, v in (model.get("schoolClosedData") or {}).items()}
+    result: dict[int, dict[str, dict[str, Any]]] = {}
+    for day in model.get("scheduleData") or []:
+        student_id = day.get("studentId")
+        date_str = day.get("date")
+        if student_id is None or not date_str:
+            continue
+        result.setdefault(student_id, {})[date_str] = {
+            "start": day.get("startTime"),
+            "end": day.get("endTime"),
+            "on_leave": bool(day.get("isOnLeave")),
+            "closed": date_str in closed_by_school.get(day.get("schoolId"), set()),
+            "message": (day.get("message") or "").strip() or None,
+        }
+    return result
 

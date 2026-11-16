@@ -23,6 +23,7 @@ from .api import VklassAuthError, VklassConnectionError, client_for_data
 from .const import DATA_COOKIE, DOMAIN, OPTION_SCHOOL_IDS, UPDATE_INTERVAL
 from .summaries import (
     is_presence_window,
+    shown_week_monday,
     next_lesson_boundary,
     summarize_absences,
     summarize_calendar,
@@ -184,6 +185,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("Could not fetch care schedule: %s", err)
             care = {}
             care_error = str(err)
+        self._ensure_shown_week(care)
 
         try:
             absences: dict[int, list[dict[str, Any]]] | None = self.client.get_absences()
@@ -235,6 +237,7 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client.ensure_login()
         fresh = self.client.get_children()
         care = self.client.get_care_schedule()
+        self._ensure_shown_week(care)
         now = datetime.now()
         for key, child in self.data["children"].items():
             new = fresh.get(key)
@@ -244,6 +247,20 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 child["food"] = new["food"]
             child["care_raw"] = care.get(child["id"], {}) if child["id"] is not None else {}
         _recompute(self.data["children"], now)
+
+    def _ensure_shown_week(self, care: dict[int, dict[str, Any]]) -> None:
+        """The overview page covers about four weeks. If the week shown is not in it, load that week too."""
+        monday = shown_week_monday(datetime.now().date())
+        if any(monday.isoformat() in entry.get("schedule", {}) for entry in care.values()):
+            return
+        try:
+            days = self.client.get_care_days(monday)
+        except VklassConnectionError as err:
+            _LOGGER.debug("Could not load the care schedule for the shown week: %s", err)
+            return
+        for student_id, schedule in days.items():
+            care.setdefault(student_id, {"holidays": [], "schedule": {}})["schedule"].update(schedule)
+        _LOGGER.debug("Care schedule for the shown week loaded from the week view")
 
     def _fetch_school_data(self, child: dict[str, Any]) -> dict[str, Any]:
         """Grades (grades 7-9 style) and courses (judgements). Either may be missing for a school."""

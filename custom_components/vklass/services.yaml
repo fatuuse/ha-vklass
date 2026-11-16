@@ -1,0 +1,52 @@
+set_care_day:
+  name: Set care day
+  description: Save the care times for one child on one day. Changes what the school sees, so use it deliberately.
+  fields:
+    student_id:
+      name: Student id
+      description: The child's student id, as shown on the Vklass care schedule.
+      required: true
+      example: 111111
+      selector:
+        number:
+          min: 1
+          mode: box
+    school_id:
+      name: School id
+      description: The school id of the child's care schedule.
+      required: true
+      example: 9001
+      selector:
+        number:
+          min: 1
+          mode: box
+    date:
+      name: Date
+      required: true
+      selector:
+        date:
+    start:
+      name: Start time
+      description: Format HH:MM.
+      required: true
+      example: "08:00"
+      selector:
+        text:
+    end:
+      name: End time
+      description: Format HH:MM.
+      required: true
+      example: "16:00"
+      selector:
+        text:
+    on_leave:
+      name: On leave
+      default: false
+      selector:
+        boolean:
+    message:
+      name: Message to staff
+      description: Visible to the staff at the care schedule.
+      selector:
+        text:
+          multiline: true

@@ -103,15 +103,21 @@ WEEKDAY_NAMES = ["måndag", "tisdag", "onsdag", "torsdag", "fredag"]
 WEEKEND_START = 5  # Saturday
 
 
+def shown_week_monday(today: date) -> date:
+    """Monday of the week shown. From Saturday on, that is the coming week."""
+    monday = today - timedelta(days=today.weekday())
+    if today.weekday() >= WEEKEND_START:
+        monday += timedelta(days=7)
+    return monday
+
+
 def current_week(schedule: dict[str, dict[str, Any]], today: date) -> list[dict[str, Any]]:
     """Monday to Friday of the week shown.
 
     The school week ends on Friday. From Saturday on, the week shown is the coming one,
     so the family can prepare for it.
     """
-    monday = today - timedelta(days=today.weekday())
-    if today.weekday() >= WEEKEND_START:
-        monday += timedelta(days=7)
+    monday = shown_week_monday(today)
     week = []
     for offset, weekday in enumerate(WEEKDAY_NAMES):
         day = monday + timedelta(days=offset)
