@@ -1,5 +1,6 @@
-## Unreleased
+## 0.2.12
 
+- The week shown in the care schedule is loaded from the week view when the overview page does not cover it, so holiday weeks show their times.
 - School ids are read from the school selector on the student's study overview page. The selected school is
   used automatically. If several schools are listed, you choose under Configure.
 - The grade and course sensors are always created. They show unknown until a school id is known.
