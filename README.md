@@ -50,8 +50,8 @@ gets the placeholder name `Student <id>` until its card can be read.
 ## Refresh schedule
 
 - **Full refresh:** every 8 hours.
-- **Attendance and care times:** every 15 minutes on weekdays from 07:00 to 09:30, so you can see whether a child
-  has arrived.
+- **Attendance and care times:** every 15 minutes on weekdays from 07:00 to 09:30 and from 15:00 to 17:00, so you
+  can see whether a child has arrived or been picked up.
 - **Keepalive:** every 10 minutes. It only keeps the session alive.
 - **Next lesson** is recalculated 10 minutes after each lesson starts, and just after it ends.
 - **Other clock-dependent values** such as today, the lunch switch at 15:00 and the week shown from Saturday are

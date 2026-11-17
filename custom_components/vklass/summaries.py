@@ -13,6 +13,8 @@ from .const import (
     IDROTT_CODE,
     LESSON_CATEGORIES,
     LESSON_START_RECALC_DELAY,
+    PRESENCE_AFTERNOON_END,
+    PRESENCE_AFTERNOON_START,
     PRESENCE_END,
     PRESENCE_START,
     SESSION_SEPARATOR,
@@ -213,10 +215,22 @@ def _has_care(child: dict[str, Any]) -> bool:
 
 
 # Entities that only make sense for some children. Everything else is enabled.
+def _has_grades(child: dict[str, Any]) -> bool:
+    return child.get("grade_term") is not None or child.get("merit_value") is not None
+
+
+def _has_courses(child: dict[str, Any]) -> bool:
+    return bool(child.get("courses")) or child.get("courses_active") is not None
+
+
 ENTITY_RELEVANCE = {
     "care_tomorrow": _has_care,
     "care_time": _has_care,
     "attendance": _has_care,
+    "merit_value": _has_grades,
+    "current_grades": _has_grades,
+    "courses_active": _has_courses,
+    "course_attendance": _has_courses,
     "report_absence": lambda child: False,
 }
 
@@ -274,8 +288,14 @@ def summarize_menu(food: dict[str, list[str]], now: datetime) -> dict[str, Any]:
 
 
 def is_presence_window(now: datetime) -> bool:
-    """True on weekdays between PRESENCE_START and PRESENCE_END, when attendance is refreshed often."""
-    return now.weekday() < 5 and PRESENCE_START <= now.time() < PRESENCE_END
+    """True on weekdays from PRESENCE_START to PRESENCE_END, and from PRESENCE_AFTERNOON_START to
+    PRESENCE_AFTERNOON_END. Attendance and care times are refreshed often in these windows."""
+    if now.weekday() >= 5:
+        return False
+    current = now.time()
+    return (PRESENCE_START <= current < PRESENCE_END) or (
+        PRESENCE_AFTERNOON_START <= current < PRESENCE_AFTERNOON_END
+    )
 
 
 def next_lesson_boundary(children: dict[str, dict[str, Any]], now: datetime) -> datetime | None:

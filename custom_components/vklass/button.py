@@ -43,6 +43,19 @@ class VklassReportAbsenceButton(VklassChildEntity, ButtonEntity):
         await self.coordinator.async_request_refresh()
 
 
+class VklassUpdateButton(VklassChildEntity, ButtonEntity):
+    """Refreshes all Vklass data now. One per child, so it can be used from any child's device."""
+
+    _attr_icon = "mdi:refresh"
+    _attr_translation_key = "update"
+
+    def __init__(self, coordinator: VklassCoordinator, entry: VklassConfigEntry, child_key: str) -> None:
+        super().__init__(coordinator, entry, child_key, "update")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_request_refresh()
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: VklassConfigEntry,
@@ -50,7 +63,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     entities_by_child: dict[str, list] = {
-        key: [VklassReportAbsenceButton(coordinator, entry, key)]
+        key: [VklassReportAbsenceButton(coordinator, entry, key), VklassUpdateButton(coordinator, entry, key)]
         for key, child in coordinator.data["children"].items()
         if child["id"] is not None
     }
