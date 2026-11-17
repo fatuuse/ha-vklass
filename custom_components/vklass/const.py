@@ -19,6 +19,9 @@ UPDATE_INTERVAL = timedelta(hours=8)
 PRESENCE_INTERVAL = timedelta(minutes=15)
 PRESENCE_START = time(7, 0)
 PRESENCE_END = time(9, 30)
+# Check-in in the afternoon, the same refresh
+PRESENCE_AFTERNOON_START = time(15, 0)
+PRESENCE_AFTERNOON_END = time(17, 0)
 # Recompute time-dependent values from stored data. No network calls.
 RECOMPUTE_INTERVAL = timedelta(hours=1)
 CALENDAR_DAYS = 7
