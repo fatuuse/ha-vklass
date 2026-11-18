@@ -1,14 +1,13 @@
-# Vklass for Home Assistant (alpha)
+# Vklass integration for Home Assistant
 
 An unofficial custom integration for [Vklass](https://www.vklass.se), the Swedish school platform.
 It reads information from your parent account and creates sensors per child in Home Assistant.
 
-> **Status: alpha.** Vklass has no public API. This integration reads the same web pages the
-> Vklass website uses, so it can break whenever Vklass changes them. Use it for testing and
-> give feedback, not for anything that must never fail.
+> **Status:** Vklass has no public API. This integration reads the same web pages the
+> Vklass website uses, so it can break whenever Vklass changes them.
 
 ## What it provides
-
+![screenshot](Screenshot.png)
 Per child: care times and a weekly care list, attendance, next lesson, lunch, grades, course judgements,
 upcoming absences, idrott days and a calendar. For the account: news, unread messages and notifications.
 Absences can be reported for today with a button, which is disabled by default.
@@ -89,9 +88,7 @@ Three example automations are in `examples/`, ready to copy into Home Assistant:
 - `notify_unread_messages.yaml`: unread messages or notifications, opens Vklass when tapped.
 - `notify_new_news.yaml`: a new news article, opens the article when tapped.
 - `notify_idrott_tomorrow.yaml`: at 19:00, reminds you which children have idrott tomorrow.
-
-Change the notify service in each file to your own. They are examples, not part of the integration.
-See also `examples/automation_news_to_calendar.yaml` for AI proposals of calendar events.
+- `automation_news_to_calendar.yaml` for AI proposals of calendar events from news.
 
 ## Privacy and security
 
