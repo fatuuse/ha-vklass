@@ -218,7 +218,7 @@ class VklassClient:
                 )
                 raise VklassAuthError("The Vklass session cookie has expired")
             raise VklassConnectionError(f"{url} returned HTTP {response.status_code}")
-        _LOGGER.debug("Fetched %s (HTTP %s, %d characters)", _path(url), response.status_code, len(response.text))
+        _LOGGER.debug("%s %s (HTTP %s, %d characters)", method, _path(url), response.status_code, len(response.text))
         self._sync_cookie()
         return response
 
@@ -559,10 +559,18 @@ def parse_care_schedule(page: str) -> dict[int, dict[str, Any]]:
     match = CARE_JSON_RE.search(page)
     if match is None:
         raise VklassConnectionError("Care schedule data not found on overview page")
-    try:
-        model = json.loads(match.group(1).replace("\\'", "'"))
-    except ValueError as err:
-        raise VklassConnectionError("Could not decode care schedule data") from err
+    raw = match.group(1)
+    _LOGGER.debug("Care schedule JSON snippet (first 300 chars): %s", raw[:300])
+    model = None
+    for candidate in [raw, raw.replace("\\\'", "'"), raw.replace("\\\'", "'").replace("\\n", "\n")]:
+        try:
+            model = json.loads(candidate)
+            break
+        except ValueError:
+            continue
+    if model is None:
+        _LOGGER.debug("Care schedule raw JSON (first 500 chars): %s", raw[:500])
+        raise VklassConnectionError("Could not decode care schedule data")
 
     try:
         closed_by_school = {int(k): set(v) for k, v in (model.get("schoolClosedData") or {}).items()}
