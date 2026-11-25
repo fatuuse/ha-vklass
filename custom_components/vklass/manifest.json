@@ -6,8 +6,8 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/fatuuse/ha-vklass",
-  "issue_tracker": "https://github.com/fatuuse/ha-vklass/issues",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/fatuuse/ha-vklass/issues",
   "requirements": [],
   "version": "0.3.1"
 }
