@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -51,6 +51,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         return
 
     async def _handle_set_care_day(call: ServiceCall) -> None:
+        # Only administrators may change school data. Calls without a user (automations, scripts)
+        # are system calls and are allowed.
+        if call.context.user_id is not None:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None or not user.is_admin:
+                raise Unauthorized(context=call.context)
         student_id = call.data["student_id"]
         for loaded in hass.config_entries.async_entries(DOMAIN):
             if loaded.state is not ConfigEntryState.LOADED:

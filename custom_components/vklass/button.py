@@ -25,6 +25,7 @@ class VklassReportAbsenceButton(VklassChildEntity, ButtonEntity):
 
     def __init__(self, coordinator: VklassCoordinator, entry: VklassConfigEntry, child_key: str) -> None:
         super().__init__(coordinator, entry, child_key, "report_absence")
+        self._attr_translation_placeholders = {"namn": self.child.get("name", "")}
 
     async def async_press(self) -> None:
         try:

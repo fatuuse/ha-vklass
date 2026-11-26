@@ -6,8 +6,12 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/fatuuse/ha-vklass",
-  "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/fatuuse/ha-vklass/issues",
+  "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "0.3.1"
+  "version": "0.3.2",
+  "categories": [
+    "productivity_information.calendars_todos",
+    "local_services"
+  ]
 }

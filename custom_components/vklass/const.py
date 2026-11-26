@@ -66,6 +66,9 @@ COOKIE_DOMAIN = ".vklass.se"
 
 # Keepalive: a request to the scoreboard every 10 minutes keeps the Vklass session alive.
 KEEPALIVE_INTERVAL = timedelta(minutes=10)
+# Password logins skip keepalive between these hours (local time). Cookie logins always keep alive.
+KEEPALIVE_QUIET_START_HOUR = 22
+KEEPALIVE_QUIET_END_HOUR = 6
 
 # Hide all-day events that span several days (for example a term or a plan) from the calendar.
 OPTION_HIDE_MULTIDAY_ALLDAY = "hide_multiday_all_day"
