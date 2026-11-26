@@ -1,3 +1,18 @@
+## 0.3.2
+
+- Security: the set_care_day service now requires an administrator when called by a user (CWE-862). Automations and scripts are still allowed.
+- Keepalive is paused between 22:00 and 06:00 for username/password logins, which sign in again on demand. Cookie logins keep alive around the clock.
+- Care schedule: added fallback JSON decoding (handles extra escape sequences); debug logging now reports only byte length and error type, never raw content (CWE-532 fix).
+- Debug log now shows HTTP method (GET/POST) alongside each request.
+- The absence button is named "Anmäl frånvaro {child}" ("Report absence {child}" in English).
+
+## 0.3.0
+
+- Grade and course sensors are enabled by default only for a child that has grades or courses. Sensors that are
+  already registered keep their setting.
+- Attendance and care times are also refreshed every 15 minutes on weekdays from 15:00 to 17:00, to see check-in
+  in the afternoon.
+
 ## 0.2.12
 
 - The week shown in the care schedule is loaded from the week view when the overview page does not cover it, so holiday weeks show their times.
