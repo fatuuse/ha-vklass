@@ -20,7 +20,14 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import VklassAuthError, VklassConnectionError, client_for_data
-from .const import DATA_COOKIE, DOMAIN, OPTION_SCHOOL_IDS, UPDATE_INTERVAL
+from .const import (
+    DATA_COOKIE,
+    DOMAIN,
+    KEEPALIVE_QUIET_END_HOUR,
+    KEEPALIVE_QUIET_START_HOUR,
+    OPTION_SCHOOL_IDS,
+    UPDATE_INTERVAL,
+)
 from .summaries import (
     is_presence_window,
     shown_week_monday,
@@ -78,8 +85,19 @@ class VklassCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.config_entry, data={**self.config_entry.data, DATA_COOKIE: cookie}
         )
 
+    def _keepalive_paused(self) -> bool:
+        """Password logins sign in again on demand, so keepalive can rest at night. Cookie logins never pause."""
+        if DATA_COOKIE in self.config_entry.data:
+            return False
+        hour = datetime.now().hour
+        if KEEPALIVE_QUIET_START_HOUR > KEEPALIVE_QUIET_END_HOUR:
+            return hour >= KEEPALIVE_QUIET_START_HOUR or hour < KEEPALIVE_QUIET_END_HOUR
+        return KEEPALIVE_QUIET_START_HOUR <= hour < KEEPALIVE_QUIET_END_HOUR
+
     async def async_keepalive(self, _now: Any = None) -> None:
         """Ping Vklass so the session does not expire from inactivity."""
+        if self._keepalive_paused():
+            return
         try:
             await self.hass.async_add_executor_job(self.client.ping)
             _LOGGER.debug("Keepalive: scoreboard ping succeeded")

@@ -560,17 +560,26 @@ def parse_care_schedule(page: str) -> dict[int, dict[str, Any]]:
     if match is None:
         raise VklassConnectionError("Care schedule data not found on overview page")
     raw = match.group(1)
-    _LOGGER.debug("Care schedule JSON snippet (first 300 chars): %s", raw[:300])
     model = None
-    for candidate in [raw, raw.replace("\\\'", "'"), raw.replace("\\\'", "'").replace("\\n", "\n")]:
+    last_err: Exception | None = None
+    # Three increasingly forgiving decode strategies.
+    for candidate in [raw, raw.replace("\\'", "'"), raw.replace("\\'", "'").replace("\\n", "\n")]:
         try:
             model = json.loads(candidate)
             break
-        except ValueError:
-            continue
+        except ValueError as err:
+            last_err = err
     if model is None:
-        _LOGGER.debug("Care schedule raw JSON (first 500 chars): %s", raw[:500])
+        # Log only byte length and error type - never raw content (CWE-532).
+        _LOGGER.debug(
+            "Care schedule JSON decode failed (%d bytes): %s",
+            len(raw), last_err,
+        )
         raise VklassConnectionError("Could not decode care schedule data")
+    _LOGGER.debug(
+        "Care schedule model keys: %s",
+        sorted(k for k in model if not isinstance(model[k], (list, dict)) or model[k]),
+    )
 
     try:
         closed_by_school = {int(k): set(v) for k, v in (model.get("schoolClosedData") or {}).items()}

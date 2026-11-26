@@ -144,7 +144,7 @@
     },
     "button": {
       "report_absence": {
-        "name": "Report absence today"
+        "name": "Report absence {namn}"
       },
       "update": {
         "name": "Update"
