@@ -4,23 +4,87 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   release:
-    name: Release
+    name: Release ${{ steps.component_info.outputs.comp_name }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Detect component from folder structure
+        id: component_info
+        run: |
+          python3 -c '
+          import glob, os, sys
+
+          dirs = sorted(p for p in glob.glob("custom_components/*") if os.path.isdir(p))
+          if len(dirs) != 1:
+              print(f"Expected exactly 1 component folder under custom_components/, found: {dirs}", file=sys.stderr)
+              sys.exit(1)
+
+          comp_dir = dirs[0]
+          comp_name = os.path.basename(comp_dir)
+          manifest_path = os.path.join(comp_dir, "manifest.json")
+          zip_name = f"{comp_name}.zip"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"comp_name={comp_name}\n")
+              out.write(f"comp_dir={comp_dir}\n")
+              out.write(f"manifest_path={manifest_path}\n")
+              out.write(f"zip_name={zip_name}\n")
+          '
+
+      - name: Verify manifest version matches release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          MANIFEST_PATH: ${{ steps.component_info.outputs.manifest_path }}
+        run: |
+          python3 -c '
+          import json, os, sys
+
+          manifest_path = os.environ["MANIFEST_PATH"]
+          tag = os.environ["RELEASE_TAG"].lstrip("v")
+
+          if not os.path.isfile(manifest_path):
+              print(f"Manifest not found at {manifest_path}", file=sys.stderr)
+              sys.exit(1)
+
+          with open(manifest_path, encoding="utf-8") as f:
+              data = json.load(f)
+
+          raw_version = str(data.get("version", ""))
+          manifest_version = raw_version.lstrip("v")
+          print(f"Release tag: {os.environ[\"RELEASE_TAG\"]} (normalized: {tag})")
+          print(f"{manifest_path} version: {raw_version}")
+
+          if manifest_version != tag:
+              print(
+                  f"Mismatch: {manifest_path} has version {raw_version}, "
+                  f"but release tag is {os.environ[\"RELEASE_TAG\"]}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          '
+
       - name: Get version from tag
         id: get_version
-        run: echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+
       - name: Create zip file
+        env:
+          COMPONENT_DIR: ${{ steps.component_info.outputs.comp_dir }}
+          ZIP_NAME: ${{ steps.component_info.outputs.zip_name }}
         run: |
-          cd custom_components/vklass
-          zip vklass.zip -r .
+          cd "$COMPONENT_DIR"
+          zip -r "$ZIP_NAME" .
+
       - name: Upload zip to release
         uses: softprops/action-gh-release@v3
         with:
-          files: custom_components/vklass/vklass.zip
+          files: ${{ steps.component_info.outputs.comp_dir }}/${{ steps.component_info.outputs.zip_name }}
