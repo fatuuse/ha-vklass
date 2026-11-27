@@ -1,90 +1,22 @@
-name: Validate
+name: Tests
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - dev
+    branches: [main]
   pull_request:
 
-permissions:
-  contents: read
-
 jobs:
-  lint-and-test:
-    name: Python Tests
+  pytest:
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-
-          if [ -f requirements_test.txt ]; then
-            pip install -r requirements_test.txt
-          fi
-
-          pip install \
-            pytest \
-            pytest-cov \
-            pytest-homeassistant \
-            ruff
-            
-      - name: Ruff
-        run: |
-          ruff check .
-
-      - name: Pytest
-        run: |
-          pytest \
-            tests \
-            --cov=custom_components \
-            --cov-report=xml \
-            --cov-report=term-missing
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.xml
-
-  hassfest:
-    name: Hassfest
-    runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Hassfest validation
-        uses: home-assistant/actions/hassfest@master
-
-  hacs:
-    name: HACS Validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: HACS Validation
-        uses: hacs/action@main
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
         with:
-          category: integration
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: uv sync --group test
+
+      - name: Run pytest
+        run: uv run pytest
